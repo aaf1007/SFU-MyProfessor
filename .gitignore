@@ -1,4 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-zip/
+
+# Vite
+*.local
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Markdown (except README)
 *.md
 !README.md
 
+# Claude
 .claude

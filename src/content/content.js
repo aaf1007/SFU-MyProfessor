@@ -4,3 +4,5 @@ const findProfessors = () => {
     professorsArr.forEach(prof => console.log(prof));
 
 }
+
+findProfessors();
