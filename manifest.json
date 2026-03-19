@@ -9,24 +9,19 @@
         "https://myschedule.erp.sfu.ca/*"
     ],
     "background": {
-        "service_worker": "background.js",
+        "service_worker": "src/background/background.ts",
         "type": "module"
     },
     "content_scripts": [
         {
             "matches": ["https://myschedule.erp.sfu.ca/*"],
-            "js": ["content.js"],
-            "css": ["content.css"],
+            "js": ["src/content/content.js"],
+            "css": ["src/content/content.css"],
             "run_at": "document_end"
         }
     ],
     "action": {
-        "default_popup": "popup.html"
-    },
-    "icons": {
-        "16": "icons/icon16.png",
-        "48": "icons/icon48.png",
-        "128": "icons/icon128.png"
+        "default_popup": "src/popup/popup.html"
     },
     "content_security_policy": {
         "extension_pages": "script-src 'self'; object-src 'self'"

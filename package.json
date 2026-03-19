@@ -13,9 +13,9 @@
   "license": "ISC",
   "type": "module",
   "devDependencies": {
-    "@crxjs/vite-plugin": "^1.0.14",
+    "@crxjs/vite-plugin": "^2.0.0-beta.23",
     "typescript": "^5.9.3",
-    "vite": "^8.0.0"
+    "vite": "^5.0.1"
   },
   "dependencies": {
     "rate-my-professor-api-ts": "^1.0.5"
