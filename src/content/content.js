@@ -1,3 +1,5 @@
+import "./content.css";
+
 const seen = new Map();
 const processing = new Set();
 
@@ -59,7 +61,6 @@ const findProfessors = () => {
           professor.avgRating = data.avgRating;
           professor.wouldTakeAgainPercent = data.wouldTakeAgainPercent;
 
-          console.log(professor);
           // Add Prof Object to HashMap
           seen.set(prof.textContent, professor);
 
@@ -109,11 +110,11 @@ const injectRatings = (professor) => {
   const ratingsInfo = document.createElement("td");
 
   ratingsInfo.innerHTML = `
-    <div class="flex">
-      <p>Name: ${professor.name}</p>
-      <p>Rating: ${professor.avgRating}</p>
-      <p>Difficulty: ${professor.avgDifficulty}</p>
-      <p>Would Take Again: ${professor.wouldTakeAgainPercent}%</p>
+    <div class="tw:flex tw:gap-4 tw:py-1 tw:text-sm">
+      <p class="tw:font-semibold">${professor.name}</p>
+      <p>Rating: <span class="tw:font-medium">${professor.avgRating}</span></p>
+      <p>Difficulty: <span class="tw:font-medium">${professor.avgDifficulty}</span></p>
+      <p>Would Take Again: <span class="tw:font-medium">${professor.wouldTakeAgainPercent}%</span></p>
     </div>
   `;
   newRow.appendChild(ratingsInfo);
