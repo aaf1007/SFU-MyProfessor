@@ -1,6 +1,12 @@
 import "./content.css";
 
-const seen = new Map();
+// processed: caches professor objects keyed by name after a successful fetch.
+// Prevents duplicate RMP API calls — rating data is reused across multiple sections
+// taught by the same professor.
+const processed = new Map();
+
+// processing: tracks in-flight fetch requests by professor name.
+// Prevents duplicate messages being sent while an async request is pending.
 const processing = new Set();
 
 /**
@@ -11,7 +17,7 @@ const processing = new Set();
  * * @sideeffects
  * - Reads from the DOM (`div.rightnclear[title="Instructor(s)"]`).
  * - Mutates the global `processing` Set to track in-flight requests.
- * - Mutates the global `seen` Map to cache successfully fetched professor data.
+ * - Mutates the global `processed` Map to cache successfully fetched professor data.
  */
 const findProfessors = () => {
   const professorsArr = document.querySelectorAll(
@@ -19,24 +25,28 @@ const findProfessors = () => {
   );
 
   professorsArr.forEach((prof) => {
-    // Adds 'Staff' into Seen
+    //  Adds 'Staff' into processed
     if (prof.textContent === "Staff") {
-      seen.set("Staff", null);
+      processed.set("Staff", null);
       return;
     }
 
-    if (!seen.has(prof.textContent) && !processing.has(prof.textContent)) {
+    //  If professor is already is processed just get data from Map
+    if (processed.has(prof.textContent)) {
+      console.log(`${prof.textContent} Duplicate Handled`);
+      const professorObj = processed.get(prof.textContent);
+      if (!prof.isBuilt) {
+        prof.isBuilt = true;
+        console.log("Data row not connected Handled");
+        renderProfessorRatings(prof, professorObj);
+      }
+      return;
+    }
+
+    // Handles getting and building professor information and data
+    if (!processed.has(prof.textContent) && !processing.has(prof.textContent)) {
       // Adds prof to processing set to avoid multiple calls when async function is processing
       processing.add(prof.textContent);
-
-      // Professor Object
-      const professor = {
-        name: prof.textContent,
-        avgDifficulty: "null",
-        avgRating: "null",
-        wouldTakeAgainPercent: "null",
-        tableRow: prof.closest("tr"),
-      };
 
       chrome.runtime.sendMessage(
         {
@@ -57,15 +67,15 @@ const findProfessors = () => {
 
           let data = response.data;
 
-          professor.avgDifficulty = data.avgDifficulty;
-          professor.avgRating = data.avgRating;
-          professor.wouldTakeAgainPercent = data.wouldTakeAgainPercent;
+          const professorObj = buildProfessor(prof, data); // Create obj
 
           // Add Prof Object to HashMap
-          seen.set(prof.textContent, professor);
+          processed.set(prof.textContent, professorObj);
 
-          // Inject Ratings on page
-          injectRatings(professor);
+          prof.isBuilt = true;
+          // Render Ratings on page
+          professorObj.name !== "Staff" &&
+            renderProfessorRatings(prof, professorObj);
         },
       );
     }
@@ -76,9 +86,62 @@ const findProfessors = () => {
 findProfessors();
 
 /**
- * Delays the execution of a function until after a certain wait time
- * has elapsed since the last time it was invoked.
- * returns a debounced @function (...ars)
+ * Builds a professor data object from a DOM element and RMP API response.
+ * @param {Element} profElement - The DOM element containing the professor's name.
+ * @param {Object} data - The professor data returned from the background script.
+ * @returns {{ name: string, avgRating: number, avgDifficulty: number, wouldTakeAgainPercent: number }}
+ */
+const buildProfessor = (profElement, data) => {
+  return {
+    name: profElement.textContent,
+    avgRating: data.avgRating,
+    avgDifficulty: data.avgDifficulty,
+    wouldTakeAgainPercent: data.wouldTakeAgainPercent,
+  };
+};
+
+/**
+ * Builds and returns a new <tr> containing the professor's rating card.
+ * Called once per render — each section gets its own independent row.
+ * Does not insert the row into the DOM — that is renderProfessorRatings' responsibility.
+ * @param {Object} professorObj - The professor object returned by buildProfessor.
+ * @returns {HTMLTableRowElement} A <tr> element populated with the professor's ratings.
+ */
+const buildDataRow = (professorObj) => {
+  const newRow = document.createElement("tr");
+  const ratingsInfo = document.createElement("td");
+  newRow.appendChild(ratingsInfo);
+
+  ratingsInfo.innerHTML = `
+    <div class="tw:flex tw:gap-4 tw:py-1 tw:text-sm">
+      <p class="tw:font-semibold">${professorObj.name}</p>
+      <p>Rating: <span class="tw:font-medium">${professorObj.avgRating}</span></p>
+      <p>Difficulty: <span class="tw:font-medium">${professorObj.avgDifficulty}</span></p>
+      <p>Would Take Again: <span class="tw:font-medium">${professorObj.wouldTakeAgainPercent}%</span></p>
+    </div>
+  `;
+
+  return newRow;
+};
+
+/**
+ * Builds a fresh rating card row and inserts it into the DOM directly after the professor's table row.
+ * Calls buildDataRow on each invocation so each section gets its own independent card.
+ * @param {Element} profElement - The DOM element containing the professor's name.
+ * @param {Object} professorObj - The professor object returned by buildProfessor.
+ */
+const renderProfessorRatings = (profElement, professorObj) => {
+  const tableRow = profElement.closest("tr");
+  const newRow = buildDataRow(professorObj);
+  tableRow.after(newRow);
+};
+
+/**
+ * Returns a debounced version of a function that delays execution until
+ * waitTime ms have elapsed since the last invocation. Resets the timer on each call.
+ * @param {Function} func - The function to debounce.
+ * @param {number} waitTime - Delay in milliseconds.
+ * @returns {Function} Debounced function.
  */
 const debounce = (func, waitTime) => {
   let timeoutId;
@@ -92,32 +155,25 @@ const debounce = (func, waitTime) => {
 
 const debounceFindProfessors = debounce(findProfessors, 500);
 
+// bodyObserver: temporary observer on document.body that waits for the specific
+// schedule container to appear in the DOM (since the SFU schedule is a SPA and
+// the container may not exist on initial load). Once found, it disconnects itself
+// and hands off to the targeted `observer` to reduce the scope of DOM watching.
+const bodyObserver = new MutationObserver(() => {
+  const container = document.querySelector("#under_header > table");
+  if (container) {
+    bodyObserver.disconnect(); // stop watching body
+    observer.observe(container, {
+      childList: true,
+      subtree: true,
+    });
+  }
+});
+
+// observer: watches the specific schedule container for DOM changes and triggers
+// a debounced findProfessors() call to catch professors added by SPA navigation.
 const observer = new MutationObserver(() => {
   debounceFindProfessors();
 });
 
-observer.observe(document.body, { childList: true, subtree: true });
-
-/*
- * Inject ratings below professor names on the page
- * @function injectRatings
- * @description takes the professor object and adds HTML into the page displaying
- * professor ratings
- * @args professor : professor.Object
- */
-const injectRatings = (professor) => {
-  const newRow = document.createElement("tr");
-  const ratingsInfo = document.createElement("td");
-
-  ratingsInfo.innerHTML = `
-    <div class="tw:flex tw:gap-4 tw:py-1 tw:text-sm">
-      <p class="tw:font-semibold">${professor.name}</p>
-      <p>Rating: <span class="tw:font-medium">${professor.avgRating}</span></p>
-      <p>Difficulty: <span class="tw:font-medium">${professor.avgDifficulty}</span></p>
-      <p>Would Take Again: <span class="tw:font-medium">${professor.wouldTakeAgainPercent}%</span></p>
-    </div>
-  `;
-  newRow.appendChild(ratingsInfo);
-
-  professor.tableRow.after(newRow); // Adds newRow afer Professor data row
-};
+bodyObserver.observe(document.body, { childList: true, subtree: true });
