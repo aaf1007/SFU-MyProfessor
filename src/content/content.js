@@ -110,6 +110,7 @@ const buildProfessor = (profElement, data) => {
 const buildDataRow = (professorObj) => {
   const newRow = document.createElement("tr");
   const ratingsInfo = document.createElement("td");
+  ratingsInfo.setAttribute("colspan", "99");
   newRow.appendChild(ratingsInfo);
 
   ratingsInfo.innerHTML = `
