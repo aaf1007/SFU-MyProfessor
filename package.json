@@ -5,19 +5,19 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "vite build",
-    "dev": "vite build --watch"
+    "dev": "wxt --browser chrome --mv3",
+    "build": "wxt build --browser chrome --mv3",
+    "postinstall": "node scripts/patch-wxt-local-fetch.mjs && wxt prepare"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "devDependencies": {
-    "@crxjs/vite-plugin": "^2.0.0-beta.23",
     "@tailwindcss/postcss": "^4.2.2",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
-    "vite": "^5.0.1"
+    "wxt": "0.20.20"
   },
   "dependencies": {
     "rate-my-professor-api-ts": "^1.0.5"

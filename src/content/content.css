@@ -1,2 +1,2 @@
 @import "tailwindcss" prefix(tw);
-@source "./content.js";
+@source "../entrypoints/content.ts";
