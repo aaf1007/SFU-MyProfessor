@@ -1,6 +1,9 @@
-# SFU ProfessorView
+# SFU MyProfessor
 
 A Chrome extension that injects Rate My Professor ratings directly into the SFU MySchedule course schedule.
+
+## Chrome Store
+- Currently under review for the chrome store deployment
 
 ## What it does
 
@@ -10,8 +13,16 @@ On `https://myschedule.erp.sfu.ca/*`, a new row is inserted under each instructo
 - Average rating
 - Average difficulty
 - Would-take-again percentage
+- Top student-reported rating tags
 
-All lookups are scoped to **Simon Fraser University**.
+###  UI
+**Card view**
+
+![Extension rating card in the schedule table](src/public/card.png)
+
+**Fullscreen**
+
+![Extension UI in fullscreen context](src/public/fullscreen.png)
 
 ## Tech Stack
 
@@ -20,9 +31,9 @@ All lookups are scoped to **Simon Fraser University**.
 | Build              | WXT                         |
 | Extension format   | Chrome Manifest V3          |
 | Background worker  | TypeScript                  |
-| Content script     | JavaScript                  |
+| Content script     | TypeScript                  |
 | Styling            | Tailwind CSS v4 via PostCSS |
-| RMP lookups        | `rate-my-professor-api-ts`  |
+| RMP lookups        | Custom GraphQL client       |
 
 ## Architecture
 
@@ -39,47 +50,18 @@ SFU MySchedule page
   |    - imports Tailwind CSS v4 utilities (prefix: tw:) used by injected rows
   |
   |-- background worker: src/background/background.ts
-       - receives FETCH_DATA messages from the content script
-       - calls rate-my-professor-api-ts for Simon Fraser University
-       - returns professor data to the content script
+  |    - receives FETCH_DATA messages from the content script
+  |    - delegates to src/background/rmp.ts
+  |    - returns professor data to the content script
+  |
+  |-- RMP client: src/background/rmp.ts
+  |    - custom GraphQL client for the RMP API
+  |    - fetches and caches the SFU school ID for the service worker lifetime
+  |    - searches for a teacher by name scoped to Simon Fraser University
+  |
+  |-- shared types: src/shared/professor.ts
+       - ProfessorData interface, message types, and isFetchDataRequest type guard
 ```
-
-### Message protocol
-
-Content script sends:
-```js
-chrome.runtime.sendMessage({ type: "FETCH_DATA", payload: { name: "John Smith" } })
-```
-
-Background responds:
-```js
-{ status: "Success", data: <professor info object> }
-{ status: "Error", message: <error> }
-```
-
-### Key functions in `content.ts`
-
-| Function | Description |
-|---|---|
-| `findProfessors()` | Scans the DOM for instructor elements and dispatches fetch requests |
-| `buildProfessor(el, data)` | Constructs a plain professor object from the DOM element and RMP response |
-| `buildDataRow(professorObj)` | Creates a `<tr>` element with the rating card HTML |
-| `renderProfessorRatings(el, professorObj)` | Inserts the rating row into the DOM after the instructor's existing row |
-| `debounce(fn, ms)` | Utility used to throttle MutationObserver callbacks |
-
-### SPA handling
-
-Two chained `MutationObserver` instances handle PeopleSoft's SPA navigation:
-
-1. `bodyObserver` — watches `document.body` until `#under_header > table` appears, then disconnects itself
-2. `observer` — watches only that schedule container and calls `findProfessors()` via a 500 ms debounce on any DOM change
-
-### Deduplication
-
-- `processed` Map — caches professor objects by name after a successful fetch; reused for duplicate sections taught by the same professor
-- `processing` Set — tracks in-flight requests to prevent duplicate messages while async calls are pending
-- `Staff` entries are added to `processed` with a `null` value and skipped
-
 ## Project Structure
 
 ```text
@@ -92,24 +74,18 @@ sfu-myprofessor/
 │   └── patch-wxt-local-fetch.mjs
 ├── src/
 │   ├── background/
-│   │   └── background.ts
+│   │   ├── background.ts
+│   │   └── rmp.ts
 │   ├── content/
 │   │   └── content.css
+│   ├── shared/
+│   │   └── professor.ts
 │   └── entrypoints/
 │       ├── background.ts
 │       ├── content.ts
 │       └── popup.html
 └── .output/
 ```
-
-## Known Limitations
-
-- No persistent cache — the `processed` Map lives only for the current page session
-- The popup (`src/entrypoints/popup.html`) is currently empty
-- The `storage` permission is declared but not used yet
-- No error/not-found state is shown when an RMP lookup fails or returns no match
-- No name variation fallback (e.g. "John Smith" is not retried if "Dr. John A. Smith" fails)
-- No automated test suite
 
 ## Getting Started
 
@@ -130,16 +106,6 @@ npm install
 npm run build
 ```
 
-This generates the unpacked extension in `.output/chrome-mv3/`.
-
-### Load it in Chrome
-
-1. Open `chrome://extensions`
-2. Enable Developer mode
-3. Click Load unpacked
-4. Select the `.output/chrome-mv3/` directory
-5. Open `https://myschedule.erp.sfu.ca/`
-
 ### Development mode
 
 ```bash
@@ -148,16 +114,6 @@ npm run dev
 
 WXT starts Chrome MV3 development mode and writes the dev build to `.output/chrome-mv3-dev/`.
 
-## How It Works
-
-1. WXT injects the `content` entrypoint at `document_end` on the SFU schedule page.
-2. `findProfessors()` queries all `div.rightnclear[title="Instructor(s)"]` elements.
-3. For each professor not already in `processed` or `processing`, a `FETCH_DATA` message is sent to the background worker.
-4. The background worker calls `rate-my-professor-api-ts` for Simon Fraser University and returns the result.
-5. `buildProfessor()` creates a plain object from the response.
-6. `buildDataRow()` creates a `<tr>` with rating info styled using Tailwind CSS v4 (`tw:` prefix).
-7. `renderProfessorRatings()` inserts the new row immediately after the instructor's existing `<tr>`.
-8. SPA navigation is handled by the two-stage `MutationObserver` chain, which re-runs `findProfessors()` after DOM changes.
 
 ## Permissions
 
@@ -181,6 +137,14 @@ WXT starts Chrome MV3 development mode and writes the dev build to `.output/chro
 **A professor row never gets data**
 - The instructor name may not match any RMP record for Simon Fraser University
 - No not-found state is displayed in the current version
+
+## What's Next
+
+- **Smarter caching**: Professor lookups could use a time-to-live (TTL) layer so repeat visits do not always hit Rate My Professor. A small remote cache (for example **Redis**) or extension storage with expiry would reduce API traffic and speed up the schedule view.
+
+## Contributing
+
+Contributions are welcome. Open a pull request, or reach out if you want to discuss an idea before coding.
 
 ## License
 

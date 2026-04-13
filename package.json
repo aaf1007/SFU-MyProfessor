@@ -7,6 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "wxt --browser chrome --mv3",
     "build": "wxt build --browser chrome --mv3",
+    "zip": "wxt zip --browser chrome --mv3",
     "postinstall": "node scripts/patch-wxt-local-fetch.mjs && wxt prepare"
   },
   "keywords": [],
@@ -18,8 +19,5 @@
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
     "wxt": "0.20.20"
-  },
-  "dependencies": {
-    "rate-my-professor-api-ts": "^1.0.5"
   }
 }

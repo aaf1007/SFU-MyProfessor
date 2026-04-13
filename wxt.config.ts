@@ -5,7 +5,7 @@ export default defineConfig({
   imports: false,
   manifestVersion: 3,
   manifest: {
-    name: "SFU ProfessorView",
+    name: "SFU MyProfessor",
     description:
       "See Rate My Professor ratings directly in your SFU course schedule.",
     permissions: ["storage"],

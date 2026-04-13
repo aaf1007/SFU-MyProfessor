@@ -1,16 +1,25 @@
 import { defineContentScript } from "wxt/utils/define-content-script";
 
 import "../content/content.css";
+import {
+  FETCH_DATA_MESSAGE_TYPE,
+  type FetchDataRequest,
+  type FetchDataResponse,
+  type ProfessorData,
+} from "../shared/professor";
 
 const initContentScript = () => {
   // processed: caches professor objects keyed by name after a successful fetch.
   // Prevents duplicate RMP API calls — rating data is reused across multiple sections
   // taught by the same professor.
-  const processed = new Map();
+  const processed = new Map<string, ProfessorData | null>();
 
   // processing: tracks in-flight fetch requests by professor name.
   // Prevents duplicate messages being sent while an async request is pending.
-  const processing = new Set();
+  const processing = new Set<string>();
+
+  // rendered: tracks which instructor elements already received their own rating row.
+  const rendered = new WeakSet<Element>();
 
   /**
    * Scrapes professor names from the page and fetches their data from the background script.
@@ -23,121 +32,231 @@ const initContentScript = () => {
    * - Mutates the global `processed` Map to cache successfully fetched professor data.
    */
   const findProfessors = () => {
-    const professorsArr = document.querySelectorAll(
+    const professorsArr = document.querySelectorAll<HTMLDivElement>(
       'div.rightnclear[title="Instructor(s)"]',
     );
 
     professorsArr.forEach((prof) => {
+      const professorName = prof.textContent?.trim();
+
+      if (!professorName) {
+        return;
+      }
+
       //  Adds 'Staff' into processed
-      if (prof.textContent === "Staff") {
+      if (professorName === "Staff") {
         processed.set("Staff", null);
         return;
       }
 
       //  If professor is already is processed just get data from Map
-      if (processed.has(prof.textContent)) {
-        console.log(`${prof.textContent} Duplicate Handled`);
-        const professorObj = processed.get(prof.textContent);
-        if (!prof.isBuilt) {
-          prof.isBuilt = true;
-          console.log("Data row not connected Handled");
-          renderProfessorRatings(prof, professorObj);
+      if (processed.has(professorName)) {
+        const professorObj = processed.get(professorName) ?? null;
+
+        if (
+          !rendered.has(prof) &&
+          renderProfessorRatings(prof, professorObj, professorName)
+        ) {
+          rendered.add(prof);
         }
+
         return;
       }
 
       // Handles getting and building professor information and data
-      if (
-        !processed.has(prof.textContent) &&
-        !processing.has(prof.textContent)
-      ) {
+      if (!processing.has(professorName)) {
         // Adds prof to processing set to avoid multiple calls when async function is processing
-        processing.add(prof.textContent);
+        processing.add(professorName);
+
+        const request: FetchDataRequest = {
+          type: FETCH_DATA_MESSAGE_TYPE,
+          payload: {
+            name: professorName,
+          },
+        };
 
         chrome.runtime.sendMessage(
-          {
-            type: "FETCH_DATA",
-            payload: {
-              name: prof.textContent,
-            },
-          },
-          (response) => {
+          request,
+          (response?: FetchDataResponse) => {
             if (chrome.runtime.lastError) {
               console.error("Error:", chrome.runtime.lastError.message);
-              processing.delete(prof.textContent);
+              processing.delete(professorName);
               return;
             }
-            // Remove from processing set
-            processing.delete(prof.textContent);
-            console.log("Background received message", response.status);
 
-            let data = response.data;
+            processing.delete(professorName);
 
-            const professorObj = buildProfessor(prof, data); // Create obj
+            if (!response) {
+              return;
+            }
 
-            // Add Prof Object to HashMap
-            processed.set(prof.textContent, professorObj);
+            if (response.status === "Error") {
+              console.error("Background error:", response.message);
+              return;
+            }
 
-            prof.isBuilt = true;
-            // Render Ratings on page
-            professorObj.name !== "Staff" &&
-              renderProfessorRatings(prof, professorObj);
+            const professorObj = response.data;
+            processed.set(professorName, professorObj);
+
+            if (
+              !rendered.has(prof) &&
+              renderProfessorRatings(prof, professorObj, professorName)
+            ) {
+              rendered.add(prof);
+            }
           },
         );
       }
     });
   };
 
-  /**
-   * Builds a professor data object from a DOM element and RMP API response.
-   * @param {Element} profElement - The DOM element containing the professor's name.
-   * @param {Object} data - The professor data returned from the background script.
-   * @returns {{ name: string, avgRating: number, avgDifficulty: number, wouldTakeAgainPercent: number }}
-   */
-  const buildProfessor = (profElement, data) => {
-    return {
-      name: profElement.textContent,
-      avgRating: data.avgRating,
-      avgDifficulty: data.avgDifficulty,
-      wouldTakeAgainPercent: data.wouldTakeAgainPercent,
-    };
+  type RatingKind = "rating" | "difficulty" | "takeAgain";
+
+  const ratingColorClass = (value: number, kind: RatingKind): string => {
+    let isGood: boolean;
+    let isMid: boolean;
+
+    if (kind === "rating") {
+      isGood = value >= 4;
+      isMid = value >= 3;
+    } else if (kind === "difficulty") {
+      // low difficulty is good
+      isGood = value <= 2.5;
+      isMid = value <= 3.5;
+    } else {
+      // takeAgain percentage
+      isGood = value >= 80;
+      isMid = value >= 60;
+    }
+
+    if (isGood) {
+      return "tw:bg-green-100 tw:text-green-800 tw:ring-green-200";
+    }
+    if (isMid) {
+      return "tw:bg-yellow-100 tw:text-yellow-800 tw:ring-yellow-200";
+    }
+    return "tw:bg-red-100 tw:text-red-800 tw:ring-red-200";
   };
 
-  /**
-   * Builds and returns a new <tr> containing the professor's rating card.
-   * Called once per render — each section gets its own independent row.
-   * Does not insert the row into the DOM — that is renderProfessorRatings' responsibility.
-   * @param {Object} professorObj - The professor object returned by buildProfessor.
-   * @returns {HTMLTableRowElement} A <tr> element populated with the professor's ratings.
-   */
-  const buildDataRow = (professorObj) => {
-    const newRow = document.createElement("tr");
-    const ratingsInfo = document.createElement("td");
-    ratingsInfo.setAttribute("colspan", "99");
-    newRow.appendChild(ratingsInfo);
+  const makePill = (label: string, value: string, colorClass: string): HTMLSpanElement => {
+    const pill = document.createElement("span");
+    pill.className = `tw:inline-flex tw:items-center tw:gap-1 tw:rounded-full tw:px-2 tw:py-0.5 tw:text-xs tw:font-medium tw:ring-1 tw:ring-inset ${colorClass}`;
+    const labelNode = document.createTextNode(`${label} `);
+    const valueEl = document.createElement("span");
+    valueEl.className = "tw:font-bold";
+    valueEl.textContent = value;
+    pill.appendChild(labelNode);
+    pill.appendChild(valueEl);
+    return pill;
+  };
 
-    ratingsInfo.innerHTML = `
-      <div class="tw:flex tw:gap-4 tw:py-1 tw:text-sm">
-        <p class="tw:font-semibold">${professorObj.name}</p>
-        <p>Rating: <span class="tw:font-medium">${professorObj.avgRating}</span></p>
-        <p>Difficulty: <span class="tw:font-medium">${professorObj.avgDifficulty}</span></p>
-        <p>Would Take Again: <span class="tw:font-medium">${professorObj.wouldTakeAgainPercent}%</span></p>
-      </div>
-    `;
+  const buildDataRow = (professorObj: ProfessorData): HTMLTableRowElement => {
+    const newRow = document.createElement("tr");
+    const td = document.createElement("td");
+    td.setAttribute("colspan", "99");
+    newRow.appendChild(td);
+
+    // Card wrapper
+    const card = document.createElement("div");
+    card.className = "tw:my-1 tw:rounded-lg tw:border tw:border-slate-200 tw:bg-slate-50 tw:px-3 tw:py-2 tw:shadow-sm";
+    td.appendChild(card);
+
+    // --- First line: name + stat pills + sample size ---
+    const firstLine = document.createElement("div");
+    firstLine.className = "tw:flex tw:flex-wrap tw:items-center tw:gap-2";
+    card.appendChild(firstLine);
+
+    // Professor name (link if legacyId available)
+    if (professorObj.legacyId) {
+      const anchor = document.createElement("a");
+      anchor.href = `https://www.ratemyprofessors.com/professor/${professorObj.legacyId}`;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      anchor.className = "tw:text-sm tw:font-semibold tw:text-slate-900 tw:underline-offset-2 tw:hover:underline";
+      anchor.textContent = professorObj.name;
+      firstLine.appendChild(anchor);
+    } else {
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "tw:text-sm tw:font-semibold tw:text-slate-900";
+      nameSpan.textContent = professorObj.name;
+      firstLine.appendChild(nameSpan);
+    }
+
+    // Stat pills
+    firstLine.appendChild(
+      makePill("Rating", `${professorObj.avgRating}/5`, ratingColorClass(professorObj.avgRating, "rating")),
+    );
+    firstLine.appendChild(
+      makePill("Difficulty", `${professorObj.avgDifficulty}/5`, ratingColorClass(professorObj.avgDifficulty, "difficulty")),
+    );
+    firstLine.appendChild(
+      makePill("Would retake", `${professorObj.wouldTakeAgainPercent}%`, ratingColorClass(professorObj.wouldTakeAgainPercent, "takeAgain")),
+    );
+
+    // Sample size
+    const sampleSpan = document.createElement("span");
+    sampleSpan.className = "tw:text-xs tw:text-slate-400";
+    sampleSpan.textContent = `(${professorObj.numRatings} rating${professorObj.numRatings === 1 ? "" : "s"})`;
+    firstLine.appendChild(sampleSpan);
+
+    // --- Second line: tags ---
+    if (professorObj.topTags.length > 0) {
+      const tagsLine = document.createElement("div");
+      tagsLine.className = "tw:mt-1 tw:flex tw:flex-wrap tw:gap-1";
+      for (const tag of professorObj.topTags) {
+        const chip = document.createElement("span");
+        chip.className = "tw:rounded-full tw:bg-slate-100 tw:px-2 tw:py-0.5 tw:text-xs tw:text-slate-500 tw:ring-1 tw:ring-inset tw:ring-slate-200";
+        chip.textContent = tag;
+        tagsLine.appendChild(chip);
+      }
+      card.appendChild(tagsLine);
+    }
+
+    return newRow;
+  };
+
+  const buildEmptyRow = (professorName: string): HTMLTableRowElement => {
+    const newRow = document.createElement("tr");
+    const td = document.createElement("td");
+    td.setAttribute("colspan", "99");
+    newRow.appendChild(td);
+
+    const card = document.createElement("div");
+    card.className = "tw:my-1 tw:rounded-lg tw:border tw:border-slate-200 tw:bg-slate-50/60 tw:px-3 tw:py-1.5 tw:text-xs tw:italic tw:text-slate-400";
+    const prefix = document.createTextNode("No Rate My Professors data for ");
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "tw:font-medium tw:not-italic";
+    nameSpan.textContent = professorName;
+    card.appendChild(prefix);
+    card.appendChild(nameSpan);
+    td.appendChild(card);
 
     return newRow;
   };
 
   /**
-   * Builds a fresh rating card row and inserts it into the DOM directly after the professor's table row.
-   * Calls buildDataRow on each invocation so each section gets its own independent card.
+   * Builds a fresh rating card row (or empty-state row) and inserts it into the DOM
+   * directly after the professor's table row. Dispatches to buildDataRow when data is
+   * available, or buildEmptyRow when RMP returned no match.
    * @param {Element} profElement - The DOM element containing the professor's name.
-   * @param {Object} professorObj - The professor object returned by buildProfessor.
+   * @param {ProfessorData | null} professorObj - Professor data, or null when not found on RMP.
    */
-  const renderProfessorRatings = (profElement, professorObj) => {
+  const renderProfessorRatings = (
+    profElement: Element,
+    professorObj: ProfessorData | null,
+    professorName: string,
+  ): boolean => {
     const tableRow = profElement.closest("tr");
-    const newRow = buildDataRow(professorObj);
+
+    if (!tableRow) {
+      return false;
+    }
+
+    const newRow = professorObj
+      ? buildDataRow(professorObj)
+      : buildEmptyRow(professorName);
     tableRow.after(newRow);
+    return true;
   };
 
   /**
@@ -147,10 +266,17 @@ const initContentScript = () => {
    * @param {number} waitTime - Delay in milliseconds.
    * @returns {Function} Debounced function.
    */
-  const debounce = (func, waitTime) => {
-    let timeoutId;
-    return (...args) => {
-      clearTimeout(timeoutId);
+  const debounce = <TArgs extends unknown[]>(
+    func: (...args: TArgs) => void,
+    waitTime: number,
+  ) => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    return (...args: TArgs) => {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+
       timeoutId = setTimeout(() => {
         func(...args);
       }, waitTime);
@@ -164,7 +290,10 @@ const initContentScript = () => {
   // the container may not exist on initial load). Once found, it disconnects itself
   // and hands off to the targeted `observer` to reduce the scope of DOM watching.
   const bodyObserver = new MutationObserver(() => {
-    const container = document.querySelector("#under_header > table");
+    const container = document.querySelector<HTMLTableElement>(
+      "#under_header > table",
+    );
+
     if (container) {
       bodyObserver.disconnect(); // stop watching body
       observer.observe(container, {

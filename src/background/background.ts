@@ -1,23 +1,43 @@
-import { RateMyProfessor } from "rate-my-professor-api-ts";
-
-async function getProfessorRatings(professorName: string) {
-  const rmpInstance = new RateMyProfessor(
-    "Simon Fraser University",
-    professorName,
-  );
-
-  return await rmpInstance.get_professor_info();
-}
+import { fetchProfessorData } from "./rmp";
+import {
+  FETCH_DATA_MESSAGE_TYPE,
+  type FetchDataResponse,
+  type FetchDataSuccessResponse,
+  isFetchDataRequest,
+} from "../shared/professor";
 
 export function initBackground() {
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === "FETCH_DATA") {
-      // 1. Call your async function separately
-      getProfessorRatings(message.payload.name)
-        .then(data => sendResponse({status: "Success", data: data}))
-        .catch(err => sendResponse({status: "Error", message: err}));
-      // 2. CRITICAL: Return true to keep the message channel open
-      return true;
+  chrome.runtime.onMessage.addListener(
+    (
+      message: unknown,
+      _sender: chrome.runtime.MessageSender,
+      sendResponse: (response: FetchDataResponse) => void,
+    ) => {
+      if (!isFetchDataRequest(message)) {
+        return;
+      }
+
+      if (message.type === FETCH_DATA_MESSAGE_TYPE) {
+        fetchProfessorData(message.payload.name)
+          .then((data) => {
+            const response: FetchDataSuccessResponse = {
+              status: "Success",
+              data,
+            };
+            sendResponse(response);
+          })
+          .catch((error: unknown) => {
+            const message =
+              error instanceof Error ? error.message : "Unknown background error.";
+
+            sendResponse({
+              status: "Error",
+              message,
+            });
+          });
+
+        return true;
+      }
     }
-  });
+  );
 }
