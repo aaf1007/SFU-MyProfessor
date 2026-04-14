@@ -3,7 +3,7 @@
 A Chrome extension that injects Rate My Professor ratings directly into the SFU MySchedule course schedule.
 
 ## Chrome Store
-- Currently under review for the chrome store deployment
+https://chromewebstore.google.com/detail/agcnjhkelnjokbchcjkldkphdkdclonp?utm_source=item-share-cb
 
 ## What it does
 
