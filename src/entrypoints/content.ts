@@ -49,6 +49,18 @@ const initContentScript = () => {
         return;
       }
 
+      // TBD means no instructor has been assigned yet — skip API call and show placeholder
+      if (professorName === "TBD" || /^\.\s*TBD$/.test(professorName)) {
+        if (!rendered.has(prof)) {
+          const tableRow = prof.closest("tr");
+          if (tableRow) {
+            tableRow.after(buildTBDRow());
+            rendered.add(prof);
+          }
+        }
+        return;
+      }
+
       //  If professor is already is processed just get data from Map
       if (processed.has(professorName)) {
         const professorObj = processed.get(professorName) ?? null;
@@ -150,6 +162,35 @@ const initContentScript = () => {
     return pill;
   };
 
+  const buildTBDRow = (): HTMLTableRowElement => {
+    const newRow = document.createElement("tr");
+    const td = document.createElement("td");
+    td.setAttribute("colspan", "99");
+    newRow.appendChild(td);
+
+    const card = document.createElement("div");
+    card.className = "tw:my-1 tw:rounded-lg tw:border-l-4 tw:border-l-[#CC0000] tw:border tw:border-slate-200 tw:bg-white tw:px-3 tw:py-2 tw:shadow-sm";
+
+    const line = document.createElement("div");
+    line.className = "tw:flex tw:flex-wrap tw:items-center tw:gap-2";
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "tw:text-sm tw:font-semibold tw:text-slate-400 tw:italic";
+    nameSpan.textContent = "Instructor TBD";
+    line.appendChild(nameSpan);
+
+    for (const label of ["Rating", "Difficulty", "Would retake"]) {
+      const pill = document.createElement("span");
+      pill.className = "tw:inline-flex tw:items-center tw:gap-1 tw:rounded-full tw:px-2 tw:py-0.5 tw:text-xs tw:font-medium tw:ring-1 tw:ring-inset tw:bg-slate-100 tw:text-slate-400 tw:ring-slate-200";
+      pill.textContent = `${label} —`;
+      line.appendChild(pill);
+    }
+
+    card.appendChild(line);
+    td.appendChild(card);
+    return newRow;
+  };
+
   const buildDataRow = (professorObj: ProfessorData): HTMLTableRowElement => {
     const newRow = document.createElement("tr");
     const td = document.createElement("td");
@@ -158,7 +199,7 @@ const initContentScript = () => {
 
     // Card wrapper
     const card = document.createElement("div");
-    card.className = "tw:my-1 tw:rounded-lg tw:border tw:border-slate-200 tw:bg-slate-50 tw:px-3 tw:py-2 tw:shadow-sm";
+    card.className = "tw:my-1 tw:rounded-lg tw:border-l-4 tw:border-l-[#CC0000] tw:border tw:border-slate-200 tw:bg-white tw:px-3 tw:py-2 tw:shadow-sm";
     td.appendChild(card);
 
     // --- First line: name + stat pills + sample size ---
@@ -172,12 +213,12 @@ const initContentScript = () => {
       anchor.href = `https://www.ratemyprofessors.com/professor/${professorObj.legacyId}`;
       anchor.target = "_blank";
       anchor.rel = "noopener noreferrer";
-      anchor.className = "tw:text-sm tw:font-semibold tw:text-slate-900 tw:underline-offset-2 tw:hover:underline";
+      anchor.className = "tw:text-sm tw:font-semibold tw:text-[#CC0000] tw:underline-offset-2 tw:hover:underline";
       anchor.textContent = professorObj.name;
       firstLine.appendChild(anchor);
     } else {
       const nameSpan = document.createElement("span");
-      nameSpan.className = "tw:text-sm tw:font-semibold tw:text-slate-900";
+      nameSpan.className = "tw:text-sm tw:font-semibold tw:text-[#CC0000]";
       nameSpan.textContent = professorObj.name;
       firstLine.appendChild(nameSpan);
     }
@@ -205,7 +246,7 @@ const initContentScript = () => {
       tagsLine.className = "tw:mt-1 tw:flex tw:flex-wrap tw:gap-1";
       for (const tag of professorObj.topTags) {
         const chip = document.createElement("span");
-        chip.className = "tw:rounded-full tw:bg-slate-100 tw:px-2 tw:py-0.5 tw:text-xs tw:text-slate-500 tw:ring-1 tw:ring-inset tw:ring-slate-200";
+        chip.className = "tw:rounded-full tw:bg-red-50 tw:px-2 tw:py-0.5 tw:text-xs tw:text-slate-600 tw:ring-1 tw:ring-inset tw:ring-red-100";
         chip.textContent = tag;
         tagsLine.appendChild(chip);
       }
@@ -222,7 +263,7 @@ const initContentScript = () => {
     newRow.appendChild(td);
 
     const card = document.createElement("div");
-    card.className = "tw:my-1 tw:rounded-lg tw:border tw:border-slate-200 tw:bg-slate-50/60 tw:px-3 tw:py-1.5 tw:text-xs tw:italic tw:text-slate-400";
+    card.className = "tw:my-1 tw:rounded-lg tw:border-l-4 tw:border-l-[#CC0000] tw:border tw:border-slate-200 tw:bg-white tw:px-3 tw:py-1.5 tw:text-xs tw:italic tw:text-slate-400";
     const prefix = document.createTextNode("No Rate My Professors data for ");
     const nameSpan = document.createElement("span");
     nameSpan.className = "tw:font-medium tw:not-italic";
