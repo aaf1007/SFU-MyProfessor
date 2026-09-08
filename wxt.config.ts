@@ -7,8 +7,10 @@ export default defineConfig({
   manifest: {
     name: "SFU MyProfessor",
     description:
-      "See Rate My Professor ratings directly in your SFU course schedule.",
-    permissions: ["storage"],
+      "Search SFU professors in your side panel and see Rate My Professors ratings in your course schedule.",
+    minimum_chrome_version: "116",
+    action: { default_title: "Search SFU professors" },
+    permissions: ["storage", "sidePanel"],
     host_permissions: [
       "https://*.ratemyprofessors.com/*",
       "https://myschedule.erp.sfu.ca/*",

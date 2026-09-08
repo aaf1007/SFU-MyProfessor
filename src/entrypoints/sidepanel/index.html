@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SFU MyProfessor</title>
+  </head>
+  <body>
+    <header class="search-header">
+      <div class="brand"><span class="brand-mark">SFU</span><span>MyProfessor</span></div>
+      <h1>Find your professor.</h1>
+      <p class="intro">A little insight before your next class.</p>
+      <form id="search-form" role="search">
+        <label for="professor-search">Professor name</label>
+        <div class="search-field">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
+          <input id="professor-search" type="search" placeholder="Search by first or last name" maxlength="100" autocomplete="off" spellcheck="false" aria-describedby="search-hint" autofocus />
+          <button id="clear-search" type="button" aria-label="Clear search" hidden>×</button>
+        </div>
+        <p id="search-hint">Simon Fraser University only</p>
+      </form>
+    </header>
+    <main>
+      <p id="search-status" role="status" aria-live="polite" aria-atomic="true">Type at least 2 characters to start.</p>
+      <section id="empty-state" class="empty-state" aria-labelledby="state-title">
+        <div class="empty-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="m3 7 9-4 9 4-9 4-9-4Z"/><path d="M6 9v7c3 3 9 3 12 0V9M21 7v9"/></svg>
+        </div>
+        <h2 id="state-title">Know who’s teaching.</h2>
+        <p id="state-description">Find ratings, difficulty, and student feedback for SFU professors.</p>
+        <button id="retry-search" class="retry-button" type="button" hidden>Try again</button>
+      </section>
+      <div id="loading-state" class="loading-state" aria-hidden="true" hidden>
+        <div class="skeleton-card"><span></span><span></span><span></span></div>
+        <div class="skeleton-card"><span></span><span></span><span></span></div>
+        <div class="skeleton-card"><span></span><span></span><span></span></div>
+      </div>
+      <ul id="search-results" aria-label="Professor search results" hidden></ul>
+      <p id="more-results" class="more-results" hidden>More matches are available. Add a first or last name to narrow your search.</p>
+    </main>
+    <footer>SFU profiles on <a href="https://www.ratemyprofessors.com/" target="_blank" rel="noopener noreferrer">Rate My Professors ↗</a></footer>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

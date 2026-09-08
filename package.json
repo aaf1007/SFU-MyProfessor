@@ -1,10 +1,11 @@
 {
   "name": "sfu-myprofessor",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test tests/*.test.mjs",
+    "typecheck": "wxt prepare && tsc --noEmit",
     "dev": "wxt --browser chrome --mv3",
     "build": "wxt build --browser chrome --mv3",
     "zip": "wxt zip --browser chrome --mv3",
@@ -16,6 +17,7 @@
   "type": "module",
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.2",
+    "esbuild": "^0.21.5",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
     "wxt": "0.20.20"

@@ -1,18 +1,39 @@
-import { fetchProfessorData } from "./rmp";
+import { fetchProfessorData, searchProfessors } from "./rmp";
 import {
   FETCH_DATA_MESSAGE_TYPE,
   type FetchDataResponse,
   type FetchDataSuccessResponse,
   isFetchDataRequest,
+  SEARCH_PROFESSORS_MESSAGE_TYPE,
+  isSearchProfessorsRequest,
+  type SearchProfessorsResponse,
 } from "../shared/professor";
 
 export function initBackground() {
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((error: unknown) => console.error("Could not configure the professor side panel:", error));
+
   chrome.runtime.onMessage.addListener(
     (
       message: unknown,
       _sender: chrome.runtime.MessageSender,
-      sendResponse: (response: FetchDataResponse) => void,
+      sendResponse: (response: FetchDataResponse | SearchProfessorsResponse) => void,
     ) => {
+      if (message && typeof message === "object" &&
+        "type" in message && message.type === SEARCH_PROFESSORS_MESSAGE_TYPE) {
+        if (!isSearchProfessorsRequest(message)) {
+          sendResponse({ status: "Error", message: "Enter a professor name of 100 characters or fewer." });
+          return;
+        }
+        searchProfessors(message.payload.query)
+          .then(data => sendResponse({ status: "Success", data }))
+          .catch((error: unknown) => sendResponse({
+            status: "Error",
+            message: error instanceof Error ? error.message : "Professor search is unavailable.",
+          }));
+        return true;
+      }
+
       if (!isFetchDataRequest(message)) {
         return;
       }

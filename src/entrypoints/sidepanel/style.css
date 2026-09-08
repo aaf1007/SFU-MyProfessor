@@ -1,0 +1,74 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #262626;
+  background: #faf9f7;
+  font-synthesis: none;
+  --red: #b5111b;
+  --muted: #686461;
+  --line: #e7e3df;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; }
+button, input { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--red); outline-offset: 4px; border-radius: 3px; }
+.search-header { position: sticky; top: 0; z-index: 1; padding: 24px 20px 16px; background: #faf9f7; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 650; letter-spacing: -.2px; }
+.brand-mark { background: var(--red); color: white; padding: 6px 8px; font-size: 15px; font-weight: 800; letter-spacing: -.7px; }
+h1 { margin: 26px 0 7px; font-size: clamp(23px, 6.5vw, 29px); line-height: 1.2; letter-spacing: -1px; font-weight: 650; }
+.intro { margin: 0 0 24px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 600; }
+.search-field { display: flex; align-items: center; gap: 9px; padding: 0 11px; border: 1px solid #bcb6b0; border-radius: 8px; background: white; }
+.search-field:focus-within { border-color: var(--red); box-shadow: 0 0 0 3px #b5111b14; }
+.search-field svg { width: 19px; height: 19px; flex-shrink: 0; color: var(--muted); }
+input { min-width: 0; width: 100%; height: 44px; padding: 0; border: 0; outline: none; background: transparent; color: #262626; font-size: 13px; }
+input:focus-visible { outline: none; }
+input::placeholder { color: #77716c; }
+input::-webkit-search-cancel-button { display: none; }
+#clear-search { flex-shrink: 0; width: 28px; height: 32px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 24px; }
+#clear-search:hover { color: var(--red); }
+#search-hint { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 11px; color: var(--muted); }
+#search-hint::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--red); }
+main { flex: 1; padding: 0 20px 24px; }
+#search-status { margin: 18px 0 14px; color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.empty-state { padding: 42px 10px 54px; text-align: center; }
+.empty-mark { display: grid; place-items: center; width: 52px; height: 52px; margin: 0 auto 18px; border-radius: 50%; background: #f0eae4; color: #746253; }
+.empty-mark svg { width: 28px; height: 28px; }
+.empty-state h2 { margin: 0 0 10px; font-size: 18px; font-weight: 600; letter-spacing: -.35px; }
+.empty-state p { max-width: 260px; margin: 0 auto; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.retry-button { margin-top: 20px; background: var(--red); color: white; border: 0; border-radius: 6px; padding: 10px 18px; font-size: 13px; font-weight: 600; }
+.retry-button:hover { background: #8b0d15; }
+#search-results { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.professor-card { padding: 18px 16px 13px; background: white; border: 1px solid var(--line); border-radius: 10px; }
+.professor-name { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.3px; line-height: 1.35; overflow-wrap: anywhere; }
+.profile-link { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; text-decoration: none; }
+.profile-link:hover { color: var(--red); text-decoration: underline; text-underline-offset: 3px; }
+.profile-arrow { color: var(--red); font-size: 18px; flex-shrink: 0; }
+.department { margin: 5px 0 19px; font-size: 12px; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+.metrics { display: grid; grid-template-columns: 1fr 1fr 1.15fr; gap: 8px; margin: 0; }
+.metric + .metric { border-left: 1px solid var(--line); padding-left: 10px; }
+.metric-label { font-size: 10px; color: var(--muted); line-height: 1.5; }
+.metric-value { margin: 5px 0 0; font-size: 22px; font-weight: 650; letter-spacing: -.6px; font-variant-numeric: tabular-nums; }
+.metric-unit { margin-left: 3px; color: var(--muted); font-size: 11px; font-weight: 400; letter-spacing: 0; }
+.rating-count { margin: 16px 0 0; padding-top: 11px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); }
+.more-results { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 18px 0 0; }
+footer { padding: 16px 20px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; line-height: 1.7; }
+footer a { text-underline-offset: 3px; }
+footer a:hover { color: var(--red); }
+.loading-state { display: grid; gap: 12px; }
+.skeleton-card { display: grid; gap: 12px; padding: 20px 16px; border: 1px solid var(--line); border-radius: 10px; background: white; }
+.skeleton-card span { height: 12px; width: 65%; border-radius: 4px; background: #efedeb; animation: pulse 1.3s ease-in-out infinite alternate; }
+.skeleton-card span:nth-child(2) { width: 42%; }
+.skeleton-card span:nth-child(3) { width: 100%; height: 44px; margin-top: 8px; }
+@keyframes pulse { to { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .skeleton-card span { animation: none; } }
+@media (max-width: 300px) {
+  .search-header { padding-inline: 14px; }
+  main { padding-inline: 14px; }
+  .professor-card { padding-inline: 12px; }
+  .metrics { gap: 5px; }
+  .metric + .metric { padding-left: 6px; }
+}

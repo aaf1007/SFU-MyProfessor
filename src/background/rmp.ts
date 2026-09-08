@@ -1,7 +1,30 @@
-import type { ProfessorData } from "../shared/professor";
+import type { ProfessorData, ProfessorSearchData, ProfessorSearchResult } from "../shared/professor";
 
 const GRAPHQL_ENDPOINT = "https://www.ratemyprofessors.com/graphql";
 const SCHOOL_NAME = "Simon Fraser University";
+
+const PROFESSOR_SEARCH_QUERY = `
+  query SearchSFUProfessors($query: TeacherSearchQuery!) {
+    search: newSearch {
+      teachers(query: $query, first: 20, after: "") {
+        edges {
+          node {
+            legacyId
+            firstName
+            lastName
+            department
+            school { id }
+            avgRating
+            avgDifficulty
+            wouldTakeAgainPercent
+            numRatings
+          }
+        }
+        pageInfo { hasNextPage }
+      }
+    }
+  }
+`;
 
 const HEADERS = {
   Accept: "*/*",
@@ -86,6 +109,10 @@ interface TeacherRatingTag {
 }
 
 interface TeacherSearchNode {
+  firstName?: string | null;
+  lastName?: string | null;
+  department?: string | null;
+  school?: { id?: string | null } | null;
   legacyId?: number | string | null;
   avgRating?: number | string | null;
   avgDifficulty?: number | string | null;
@@ -97,6 +124,7 @@ interface TeacherSearchNode {
 interface TeacherSearchResponse {
   search?: {
     teachers?: {
+      pageInfo?: { hasNextPage?: boolean };
       edges?: Array<{
         node?: TeacherSearchNode | null;
       }>;
@@ -146,6 +174,7 @@ const postGraphQL = async <TData, TVariables>(
     body: JSON.stringify({ query, variables }),
     credentials: "include",
     mode: "cors",
+    signal: AbortSignal.timeout(15_000),
   });
 
   if (!response.ok) {
@@ -250,4 +279,53 @@ export const fetchProfessorData = async (
     legacyId,
     topTags,
   };
+};
+
+const parseScore = (value: unknown, min: number, max: number): number | null => {
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  if (typeof value === "string" && !value.trim()) return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= min && number <= max ? number : null;
+};
+
+export const searchProfessors = async (query: string): Promise<ProfessorSearchData> => {
+  const text = query.trim().replace(/\s+/g, " ");
+  if (text.length < 2) return { professors: [], hasMore: false };
+  if (text.length > 100) throw new Error("Search names must be 100 characters or fewer.");
+
+  const schoolId = await getSchoolId();
+  const data = await postGraphQL<TeacherSearchResponse, Pick<TeacherSearchVariables, "query">>(
+    PROFESSOR_SEARCH_QUERY,
+    { query: { text, schoolID: schoolId, fallback: false, departmentID: null } },
+  );
+
+  const teachers = data.search?.teachers;
+  // A malformed response is a service error, not a successful empty search.
+  if (!Array.isArray(teachers?.edges)) throw new Error("RMP returned an invalid search response.");
+
+  const professors: ProfessorSearchResult[] = [];
+  const seen = new Set<string>();
+  for (const edge of teachers.edges) {
+    const teacher = edge?.node;
+    // Fail closed even if the upstream search unexpectedly ignores its school filter.
+    if (!teacher || teacher.school?.id !== schoolId) continue;
+    const name = [teacher.firstName, teacher.lastName]
+      .filter((part): part is string => typeof part === "string" && !!part.trim())
+      .map(part => part.trim()).join(" ");
+    if (!name) continue;
+    const rawId = teacher.legacyId == null ? "" : String(teacher.legacyId);
+    const legacyId = /^[1-9]\d*$/.test(rawId) ? rawId : null;
+    if (legacyId && seen.has(legacyId)) continue;
+    if (legacyId) seen.add(legacyId);
+    const numRatings = Math.max(0, Math.floor(parseNumber(teacher.numRatings)));
+    professors.push({
+      name, legacyId,
+      department: teacher.department?.trim() || "Department unavailable",
+      numRatings,
+      avgRating: numRatings ? parseScore(teacher.avgRating, 1, 5) : null,
+      avgDifficulty: numRatings ? parseScore(teacher.avgDifficulty, 1, 5) : null,
+      wouldTakeAgainPercent: numRatings ? parseScore(teacher.wouldTakeAgainPercent, 0, 100) : null,
+    });
+  }
+  return { professors, hasMore: teachers.pageInfo?.hasNextPage === true };
 };
