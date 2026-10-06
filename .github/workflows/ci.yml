@@ -15,7 +15,8 @@ jobs:
           node-version: 24
           cache: npm
       # postinstall patches WXT and runs `wxt prepare`.
-      - run: npm ci
+      # npm ci rejects the lock file across npm versions (optional Tailwind WASM deps).
+      - run: npm install --no-audit --no-fund
       - run: npm test
       - run: npm run typecheck
       - run: npm run build
