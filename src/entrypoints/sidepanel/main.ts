@@ -1,5 +1,9 @@
 import "./style.css";
+import { formatScoreValue, type ScoreKind, scoreUnit } from "../../shared/format";
 import {
+  isPendingSearch,
+  PENDING_SEARCH_KEY,
+  rmpProfileUrl,
   SEARCH_PROFESSORS_MESSAGE_TYPE,
   type ProfessorSearchResult,
   type SearchProfessorsRequest,
@@ -17,7 +21,9 @@ const title = document.querySelector<HTMLHeadingElement>("#state-title")!;
 const description = document.querySelector<HTMLParagraphElement>("#state-description")!;
 const loading = document.querySelector<HTMLDivElement>("#loading-state")!;
 const results = document.querySelector<HTMLUListElement>("#search-results")!;
-const more = document.querySelector<HTMLParagraphElement>("#more-results")!;
+const more = document.querySelector<HTMLDivElement>("#more-results")!;
+const loadMore = document.querySelector<HTMLButtonElement>("#load-more")!;
+const loadMoreStatus = document.querySelector<HTMLParagraphElement>("#load-more-status")!;
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text: string) {
   const node = document.createElement(tag);
@@ -31,7 +37,7 @@ function buildProfessorCard(professor: ProfessorSearchResult): HTMLLIElement {
   const heading = element("h2", "professor-name", "");
   if (professor.legacyId) {
     const link = element("a", "profile-link", professor.name);
-    link.href = `https://www.ratemyprofessors.com/professor/${professor.legacyId}`;
+    link.href = rmpProfileUrl(professor.legacyId);
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     link.setAttribute("aria-label", `${professor.name} on Rate My Professors (opens in a new tab)`);
@@ -42,17 +48,17 @@ function buildProfessorCard(professor: ProfessorSearchResult): HTMLLIElement {
   } else heading.textContent = professor.name;
 
   const metrics = element("dl", "metrics", "");
-  const scores: Array<[string, number | null, string]> = [
-    ["Rating", professor.avgRating, "/ 5"],
-    ["Difficulty", professor.avgDifficulty, "/ 5"],
-    ["Would retake", professor.wouldTakeAgainPercent, "%"],
+  const scores: Array<[string, number | null, ScoreKind]> = [
+    ["Rating", professor.avgRating, "rating"],
+    ["Difficulty", professor.avgDifficulty, "difficulty"],
+    ["Would retake", professor.wouldTakeAgainPercent, "takeAgain"],
   ];
-  for (const [label, score, unit] of scores) {
+  for (const [label, score, kind] of scores) {
     const metric = element("div", "metric", "");
-    const value = element("dd", "metric-value", score === null ? "—" :
-      unit === "%" ? String(Math.round(score)) : score.toFixed(1));
-    if (score === null) value.setAttribute("aria-label", "Not available");
-    else value.append(element("span", "metric-unit", unit));
+    const formatted = formatScoreValue(score, kind);
+    const value = element("dd", "metric-value", formatted ?? "—");
+    if (formatted === null) value.setAttribute("aria-label", "Not available");
+    else value.append(element("span", "metric-unit", scoreUnit(kind)));
     metric.append(element("dt", "metric-label", label), value);
     metrics.append(metric);
   }
@@ -85,6 +91,9 @@ function render(state: SearchState) {
   } else if (state.status === "success") {
     const { professors, hasMore } = state.data;
     more.hidden = !hasMore;
+    loadMore.disabled = state.loadingMore;
+    loadMore.textContent = state.loadingMore ? "Loading more…" : "Show more professors";
+    loadMoreStatus.textContent = state.loadMoreFailed ? "Couldn’t load more professors. Try again." : "";
     if (!professors.length) {
       status.textContent = `No SFU matches for “${state.query}”.`;
       title.textContent = "No professors found.";
@@ -98,9 +107,9 @@ function render(state: SearchState) {
   }
 }
 
-const search = createProfessorSearch(async query => {
+const search = createProfessorSearch(async (query, after) => {
   const request: SearchProfessorsRequest = {
-    type: SEARCH_PROFESSORS_MESSAGE_TYPE, payload: { query },
+    type: SEARCH_PROFESSORS_MESSAGE_TYPE, payload: after ? { query, after } : { query },
   };
   const response: SearchProfessorsResponse | undefined = await chrome.runtime.sendMessage(request);
   if (!response || response.status !== "Success" || !Array.isArray(response.data?.professors)) {
@@ -128,4 +137,25 @@ retry.addEventListener("click", () => {
   input.focus();
   search.update(input.value, true);
 });
+loadMore.addEventListener("click", () => void search.loadMore());
+
+// "Search ↗" buttons on MySchedule rating rows hand their query over through session
+// storage: read on load (the panel was just opened) and watched while the panel is open.
+const PENDING_SEARCH_MAX_AGE_MS = 10_000;
+function applyPendingSearch(value: unknown) {
+  if (!isPendingSearch(value) || Date.now() - value.requestedAt > PENDING_SEARCH_MAX_AGE_MS) return;
+  input.value = value.query;
+  search.update(value.query, true);
+  input.focus();
+  void chrome.storage.session.remove(PENDING_SEARCH_KEY);
+}
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "session" && changes[PENDING_SEARCH_KEY]?.newValue) {
+    applyPendingSearch(changes[PENDING_SEARCH_KEY].newValue);
+  }
+});
+
 search.update(input.value);
+chrome.storage.session.get(PENDING_SEARCH_KEY)
+  .then(stored => applyPendingSearch(stored[PENDING_SEARCH_KEY]))
+  .catch((error: unknown) => console.error("Could not read the pending search:", error));

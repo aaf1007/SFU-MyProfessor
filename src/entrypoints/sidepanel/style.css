@@ -54,7 +54,12 @@ main { flex: 1; padding: 0 20px 24px; }
 .metric-value { margin: 5px 0 0; font-size: 22px; font-weight: 650; letter-spacing: -.6px; font-variant-numeric: tabular-nums; }
 .metric-unit { margin-left: 3px; color: var(--muted); font-size: 11px; font-weight: 400; letter-spacing: 0; }
 .rating-count { margin: 16px 0 0; padding-top: 11px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); }
-.more-results { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 18px 0 0; }
+.more-results { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 18px 0 0; text-align: center; }
+.more-results p { margin: 8px 0 0; }
+.more-results p:empty { display: none; }
+.load-more-button { width: 100%; padding: 10px 18px; background: white; color: var(--red); border: 1px solid var(--line); border-radius: 6px; font-size: 13px; font-weight: 600; }
+.load-more-button:hover:not(:disabled) { border-color: var(--red); }
+.load-more-button:disabled { color: var(--muted); cursor: progress; }
 footer { padding: 16px 20px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; line-height: 1.7; }
 footer a { text-underline-offset: 3px; }
 footer a:hover { color: var(--red); }

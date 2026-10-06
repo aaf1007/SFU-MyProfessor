@@ -36,7 +36,10 @@
         <div class="skeleton-card"><span></span><span></span><span></span></div>
       </div>
       <ul id="search-results" aria-label="Professor search results" hidden></ul>
-      <p id="more-results" class="more-results" hidden>More matches are available. Add a first or last name to narrow your search.</p>
+      <div id="more-results" class="more-results" hidden>
+        <button id="load-more" class="load-more-button" type="button">Show more professors</button>
+        <p id="load-more-status" role="status" aria-live="polite"></p>
+      </div>
     </main>
     <footer>SFU profiles on <a href="https://www.ratemyprofessors.com/" target="_blank" rel="noopener noreferrer">Rate My Professors ↗</a></footer>
     <script type="module" src="./main.ts"></script>
