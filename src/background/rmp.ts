@@ -1,12 +1,15 @@
+import { isSameProfessor } from "./name-match";
 import type { ProfessorData, ProfessorSearchData, ProfessorSearchResult } from "../shared/professor";
 
 const GRAPHQL_ENDPOINT = "https://www.ratemyprofessors.com/graphql";
 const SCHOOL_NAME = "Simon Fraser University";
+// Candidates checked for a name match on schedule lookups (RMP's ranking is fuzzy).
+const SCHEDULE_CANDIDATES = 5;
 
 const PROFESSOR_SEARCH_QUERY = `
-  query SearchSFUProfessors($query: TeacherSearchQuery!) {
+  query SearchSFUProfessors($query: TeacherSearchQuery!, $after: String) {
     search: newSearch {
-      teachers(query: $query, first: 20, after: "") {
+      teachers(query: $query, first: 20, after: $after) {
         edges {
           node {
             legacyId
@@ -20,7 +23,7 @@ const PROFESSOR_SEARCH_QUERY = `
             numRatings
           }
         }
-        pageInfo { hasNextPage }
+        pageInfo { hasNextPage endCursor }
       }
     }
   }
@@ -54,10 +57,13 @@ const TEACHER_SEARCH_QUERY = `
     $includeSchoolFilter: Boolean!
   ) {
     search: newSearch {
-      teachers(query: $query, first: 1, after: "") {
+      teachers(query: $query, first: ${SCHEDULE_CANDIDATES}, after: "") {
         edges {
           node {
             legacyId
+            firstName
+            lastName
+            school { id }
             avgRating
             avgDifficulty
             wouldTakeAgainPercent
@@ -124,7 +130,7 @@ interface TeacherSearchNode {
 interface TeacherSearchResponse {
   search?: {
     teachers?: {
-      pageInfo?: { hasNextPage?: boolean };
+      pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
       edges?: Array<{
         node?: TeacherSearchNode | null;
       }>;
@@ -149,6 +155,8 @@ interface TeacherSearchVariables {
   includeSchoolFilter: boolean;
 }
 
+type SearchVariables = Pick<TeacherSearchVariables, "query"> & { after: string };
+
 let schoolIdPromise: Promise<string> | null = null;
 
 const parseNumber = (value: unknown): number => {
@@ -172,7 +180,6 @@ const postGraphQL = async <TData, TVariables>(
     method: "POST",
     headers: HEADERS,
     body: JSON.stringify({ query, variables }),
-    credentials: "include",
     mode: "cors",
     signal: AbortSignal.timeout(15_000),
   });
@@ -229,10 +236,41 @@ const getSchoolId = async (): Promise<string> => {
   return schoolIdPromise;
 };
 
+const parseScore = (value: unknown, min: number, max: number): number | null => {
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  if (typeof value === "string" && !value.trim()) return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= min && number <= max ? number : null;
+};
+
+/**
+ * Normalizes RMP's loosely typed score fields. RMP reports 0 or -1 for scores it has no
+ * data for, so anything out of range — or any score on a teacher with no ratings — is null.
+ */
+const parseScores = (teacher: TeacherSearchNode) => {
+  const numRatings = Math.max(0, Math.floor(parseNumber(teacher.numRatings)));
+  return {
+    numRatings,
+    avgRating: numRatings ? parseScore(teacher.avgRating, 1, 5) : null,
+    avgDifficulty: numRatings ? parseScore(teacher.avgDifficulty, 1, 5) : null,
+    wouldTakeAgainPercent: numRatings ? parseScore(teacher.wouldTakeAgainPercent, 0, 100) : null,
+  };
+};
+
+const parseLegacyId = (value: unknown): string | null => {
+  const raw = value == null ? "" : String(value);
+  return /^[1-9]\d*$/.test(raw) ? raw : null;
+};
+
+const fullName = (teacher: TeacherSearchNode): string =>
+  [teacher.firstName, teacher.lastName]
+    .filter((part): part is string => typeof part === "string" && !!part.trim())
+    .map(part => part.trim()).join(" ");
+
 export const fetchProfessorData = async (
   professorName: string,
 ): Promise<ProfessorData | null> => {
-  const normalizedName = professorName.trim();
+  const normalizedName = professorName.trim().replace(/\s+/g, " ");
 
   if (!normalizedName) {
     return null;
@@ -253,7 +291,15 @@ export const fetchProfessorData = async (
     },
   );
 
-  const teacher = data.search?.teachers?.edges?.[0]?.node;
+  // Only accept a candidate that is at SFU and whose name actually matches; otherwise a
+  // fuzzy hit would show another professor's ratings under this instructor's name.
+  const teacher = data.search?.teachers?.edges
+    ?.map(edge => edge?.node)
+    .find((node): node is TeacherSearchNode =>
+      !!node &&
+      node.school?.id === schoolId &&
+      isSameProfessor(normalizedName, node.firstName ?? "", node.lastName ?? ""),
+    );
 
   if (!teacher) {
     return null;
@@ -267,36 +313,23 @@ export const fetchProfessorData = async (
     .slice(0, 3)
     .map((t) => t.tagName);
 
-  const legacyId =
-    teacher.legacyId != null ? String(teacher.legacyId) : null;
-
   return {
-    name: normalizedName,
-    avgRating: parseNumber(teacher.avgRating),
-    avgDifficulty: parseNumber(teacher.avgDifficulty),
-    wouldTakeAgainPercent: parseNumber(teacher.wouldTakeAgainPercent),
-    numRatings: parseNumber(teacher.numRatings),
-    legacyId,
+    name: fullName(teacher) || normalizedName,
+    ...parseScores(teacher),
+    legacyId: parseLegacyId(teacher.legacyId),
     topTags,
   };
 };
 
-const parseScore = (value: unknown, min: number, max: number): number | null => {
-  if (typeof value !== "number" && typeof value !== "string") return null;
-  if (typeof value === "string" && !value.trim()) return null;
-  const number = Number(value);
-  return Number.isFinite(number) && number >= min && number <= max ? number : null;
-};
-
-export const searchProfessors = async (query: string): Promise<ProfessorSearchData> => {
+export const searchProfessors = async (query: string, after = ""): Promise<ProfessorSearchData> => {
   const text = query.trim().replace(/\s+/g, " ");
-  if (text.length < 2) return { professors: [], hasMore: false };
+  if (text.length < 2) return { professors: [], hasMore: false, cursor: null };
   if (text.length > 100) throw new Error("Search names must be 100 characters or fewer.");
 
   const schoolId = await getSchoolId();
-  const data = await postGraphQL<TeacherSearchResponse, Pick<TeacherSearchVariables, "query">>(
+  const data = await postGraphQL<TeacherSearchResponse, SearchVariables>(
     PROFESSOR_SEARCH_QUERY,
-    { query: { text, schoolID: schoolId, fallback: false, departmentID: null } },
+    { query: { text, schoolID: schoolId, fallback: false, departmentID: null }, after },
   );
 
   const teachers = data.search?.teachers;
@@ -309,23 +342,22 @@ export const searchProfessors = async (query: string): Promise<ProfessorSearchDa
     const teacher = edge?.node;
     // Fail closed even if the upstream search unexpectedly ignores its school filter.
     if (!teacher || teacher.school?.id !== schoolId) continue;
-    const name = [teacher.firstName, teacher.lastName]
-      .filter((part): part is string => typeof part === "string" && !!part.trim())
-      .map(part => part.trim()).join(" ");
+    const name = fullName(teacher);
     if (!name) continue;
-    const rawId = teacher.legacyId == null ? "" : String(teacher.legacyId);
-    const legacyId = /^[1-9]\d*$/.test(rawId) ? rawId : null;
+    const legacyId = parseLegacyId(teacher.legacyId);
     if (legacyId && seen.has(legacyId)) continue;
     if (legacyId) seen.add(legacyId);
-    const numRatings = Math.max(0, Math.floor(parseNumber(teacher.numRatings)));
     professors.push({
       name, legacyId,
       department: teacher.department?.trim() || "Department unavailable",
-      numRatings,
-      avgRating: numRatings ? parseScore(teacher.avgRating, 1, 5) : null,
-      avgDifficulty: numRatings ? parseScore(teacher.avgDifficulty, 1, 5) : null,
-      wouldTakeAgainPercent: numRatings ? parseScore(teacher.wouldTakeAgainPercent, 0, 100) : null,
+      ...parseScores(teacher),
     });
   }
-  return { professors, hasMore: teachers.pageInfo?.hasNextPage === true };
+  const hasMore = teachers.pageInfo?.hasNextPage === true;
+  const endCursor = teachers.pageInfo?.endCursor;
+  return {
+    professors,
+    hasMore,
+    cursor: hasMore && typeof endCursor === "string" && endCursor ? endCursor : null,
+  };
 };
