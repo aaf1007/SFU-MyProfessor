@@ -7,37 +7,48 @@
     <meta name="color-scheme" content="light dark" />
   </head>
   <body>
-    <header class="search-header">
-      <div class="brand"><span class="brand-mark">SFU</span><span>MyProfessor</span></div>
+    <header class="masthead">
+      <p class="wordmark"><span class="wordmark-sfu">SFU</span> MyProfessor</p>
+      <div class="tabs" role="radiogroup" aria-label="Search by">
+        <button type="button" role="radio" aria-checked="true" data-mode="professor">Professors</button>
+        <button type="button" role="radio" aria-checked="false" data-mode="course">Courses</button>
+      </div>
       <form id="search-form" role="search">
-        <label class="visually-hidden" for="professor-search">Professor name</label>
-        <div class="search-field">
-          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
-          <input id="professor-search" type="search" placeholder="Search SFU professors" maxlength="100" autocomplete="off" spellcheck="false" aria-describedby="search-hint" autofocus />
-          <button id="clear-search" type="button" aria-label="Clear search" hidden>×</button>
+        <div class="search-row">
+          <div class="search-field">
+            <label id="search-label" class="visually-hidden" for="professor-search">Professor name</label>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
+            <input id="professor-search" type="search" placeholder="First or last name" maxlength="100" autocomplete="off" spellcheck="false" autofocus />
+            <button id="clear-search" type="button" aria-label="Clear search" hidden>
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m7 7 10 10M17 7 7 17"/></svg>
+            </button>
+          </div>
+          <label class="visually-hidden" for="course-term">Term</label>
+          <select id="course-term" hidden></select>
         </div>
-        <p id="search-hint">First or last name · Esc to clear</p>
       </form>
     </header>
     <main>
-      <p id="search-status" role="status" aria-live="polite" aria-atomic="true">Type at least 2 characters to start.</p>
+      <p id="search-status" role="status" aria-live="polite" aria-atomic="true"></p>
       <section id="empty-state" class="empty-state" aria-labelledby="state-title">
-        <div class="empty-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="m3 7 9-4 9 4-9 4-9-4Z"/><path d="M6 9v7c3 3 9 3 12 0V9M21 7v9"/></svg>
-        </div>
-        <h1 id="state-title">Find your professor.</h1>
-        <p id="state-description">Ratings, difficulty, and would-retake scores for SFU professors, from Rate My Professors.</p>
+        <h1 id="state-title">Look up an SFU instructor</h1>
+        <p id="state-description">Type a first or last name to see their Rate My Professors scores.</p>
+        <p id="examples" class="examples" hidden></p>
         <button id="retry-search" class="retry-button" type="button" hidden>Try again</button>
       </section>
       <div id="loading-state" class="loading-state" aria-hidden="true" hidden>
-        <div class="skeleton-card"><span></span><span></span><span></span></div>
-        <div class="skeleton-card"><span></span><span></span><span></span></div>
-        <div class="skeleton-card"><span></span><span></span><span></span></div>
+        <div class="skeleton-row"><span></span><span></span><span></span></div>
+        <div class="skeleton-row"><span></span><span></span><span></span></div>
+        <div class="skeleton-row"><span></span><span></span><span></span></div>
       </div>
-      <ul id="search-results" aria-label="Professor search results" hidden></ul>
+      <div id="course-summary" class="course-summary" hidden>
+        <h2 id="course-title" class="course-title"></h2>
+        <p id="course-meta" class="course-meta"></p>
+      </div>
+      <ul id="search-results" class="results" aria-label="Search results" hidden></ul>
       <p id="more-results" class="more-results" hidden>More matches are available. Add a first or last name to narrow your search.</p>
     </main>
-    <footer>SFU profiles on <a href="https://www.ratemyprofessors.com/" target="_blank" rel="noopener noreferrer">Rate My Professors ↗</a></footer>
+    <footer>Scores from <a href="https://www.ratemyprofessors.com/" target="_blank" rel="noopener noreferrer">Rate My Professors</a>. Course instructors from SFU course outlines.</footer>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

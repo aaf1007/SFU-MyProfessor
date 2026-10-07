@@ -1,11 +1,18 @@
 import "./style.css";
 import {
+  COURSE_INSTRUCTORS_MESSAGE_TYPE,
+  type CourseInstructor,
+  type CourseInstructorsData,
+  type CourseInstructorsRequest,
+  type CourseInstructorsResponse,
+  type CourseSection,
   SEARCH_PROFESSORS_MESSAGE_TYPE,
   type ProfessorSearchResult,
   type SearchProfessorsRequest,
   type SearchProfessorsResponse,
 } from "../../shared/professor";
-import { FEW_RATINGS, metricTone, type MetricKind } from "../../shared/format";
+import { formatCourseCode, parseCourseCode, termLabel, termOptions } from "../../shared/course";
+import { FEW_RATINGS } from "../../shared/format";
 import { createProfessorSearch, type SearchState } from "../../sidepanel/search-controller";
 
 const input = document.querySelector<HTMLInputElement>("#professor-search")!;
@@ -19,6 +26,13 @@ const description = document.querySelector<HTMLParagraphElement>("#state-descrip
 const loading = document.querySelector<HTMLDivElement>("#loading-state")!;
 const results = document.querySelector<HTMLUListElement>("#search-results")!;
 const more = document.querySelector<HTMLParagraphElement>("#more-results")!;
+const label = document.querySelector<HTMLLabelElement>("#search-label")!;
+const examples = document.querySelector<HTMLParagraphElement>("#examples")!;
+const termSelect = document.querySelector<HTMLSelectElement>("#course-term")!;
+const modeButtons = [...document.querySelectorAll<HTMLButtonElement>(".tabs [data-mode]")];
+const courseSummary = document.querySelector<HTMLDivElement>("#course-summary")!;
+const courseTitle = document.querySelector<HTMLHeadingElement>("#course-title")!;
+const courseMeta = document.querySelector<HTMLParagraphElement>("#course-meta")!;
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text: string) {
   const node = document.createElement(tag);
@@ -27,106 +41,188 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: strin
   return node;
 }
 
-function buildMeter(label: string, score: number | null, kind: MetricKind) {
-  const isPercent = kind === "takeAgain";
-  const meter = element("div", "meter", "");
-  const top = element("div", "meter-top", "");
-  const value = element("dd", "meter-value", score === null ? "—" :
-    isPercent ? `${Math.round(score)}%` : score.toFixed(1));
-  if (score === null) value.setAttribute("aria-label", "Not available");
-  else if (!isPercent) value.append(element("span", "metric-unit", "/ 5"));
-  top.append(element("dt", "meter-label", label), value);
-  const track = element("div", "meter-track", "");
-  track.setAttribute("aria-hidden", "true");
-  if (score !== null) {
-    const fill = element("span", `meter-fill tone-${metricTone(score, kind)}`, "");
-    fill.style.width = `${Math.min(100, Math.max(0, isPercent ? score : score * 20))}%`;
-    track.append(fill);
-  }
-  meter.append(top, track);
-  return meter;
+const formatScore = (score: number | null, percent = false) =>
+  score === null ? "–" : percent ? `${Math.round(score)}%` : score.toFixed(1);
+
+function buildStat(label: string, value: string) {
+  const stat = element("div", "stat", "");
+  stat.append(element("dt", "", label), element("dd", "", value));
+  return stat;
 }
 
-function buildProfessorCard(professor: ProfessorSearchResult): HTMLLIElement {
-  const card = element("li", "professor-card", "");
+function buildSections(sections: CourseSection[]) {
+  const list = element("ul", "sections", "");
+  list.setAttribute("aria-label", "Sections");
+  for (const { section, campus, deliveryMethod } of sections) {
+    const item = element("li", "", "");
+    const where = [campus, deliveryMethod && deliveryMethod !== "In Person" ? deliveryMethod.toLowerCase() : null]
+      .filter(Boolean).join(", ");
+    item.append(element("b", "", section), where ? ` ${where}` : "");
+    list.append(item);
+  }
+  return list;
+}
 
-  const rating = professor.avgRating;
-  const badge = element("div", `rating-badge${rating === null ? "" : ` tone-${metricTone(rating, "rating")}`}`, "");
-  badge.setAttribute("aria-label", rating === null ? "Rating not available" : `Rating ${rating.toFixed(1)} out of 5`);
-  badge.append(element("span", "rating-value", rating === null ? "—" : rating.toFixed(1)),
-    element("span", "rating-scale", rating === null ? "No rating" : "/ 5"));
-  for (const child of badge.children) child.setAttribute("aria-hidden", "true");
+interface RowOptions { rank?: number; sfuName?: string; sections?: CourseSection[] }
 
-  const identity = element("div", "identity", "");
-  const heading = element("h2", "professor-name", "");
-  if (professor.legacyId) {
-    // The link's ::after stretches over the whole card, so the card is one click target.
-    const link = element("a", "profile-link", professor.name);
+function buildRow(professor: ProfessorSearchResult | null, options: RowOptions = {}): HTMLLIElement {
+  const row = element("li", "result", "");
+  if (options.rank) {
+    const rank = element("span", "rank", String(options.rank));
+    rank.setAttribute("aria-label", `Rank ${options.rank}`);
+    row.append(rank);
+  }
+
+  const body = element("div", "result-body", "");
+  const name = professor?.name ?? options.sfuName ?? "";
+  const heading = element("h2", "result-name", "");
+  if (professor?.legacyId) {
+    // The link's ::after covers the whole row, so the row is one click target.
+    const link = element("a", "", name);
     link.href = `https://www.ratemyprofessors.com/professor/${professor.legacyId}`;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    link.setAttribute("aria-label", `${professor.name} on Rate My Professors (opens in a new tab)`);
+    link.setAttribute("aria-label", `${name} on Rate My Professors (opens in a new tab)`);
     heading.append(link);
-    const arrow = element("span", "profile-arrow", "↗");
-    arrow.setAttribute("aria-hidden", "true");
-    card.append(arrow);
-  } else heading.textContent = professor.name;
-  identity.append(heading, element("p", "department", professor.department));
+  } else heading.textContent = name;
+  body.append(heading);
+  // In a course every instructor shares a department, so the sections they teach replace it.
+  if (options.sections?.length) body.append(buildSections(options.sections));
+  else if (professor) body.append(element("p", "result-dept", professor.department));
+  if (!professor) body.append(element("p", "result-count", "No Rate My Professors profile found."));
 
-  const summary = element("div", "card-summary", "");
-  summary.append(badge, identity);
-
-  const metrics = element("dl", "metrics", "");
-  metrics.append(buildMeter("Difficulty", professor.avgDifficulty, "difficulty"),
-    buildMeter("Would retake", professor.wouldTakeAgainPercent, "takeAgain"));
-
-  const count = element("p", "rating-count", professor.numRatings === 0 ? "No student ratings yet" :
-    `${professor.numRatings.toLocaleString()} student ${professor.numRatings === 1 ? "rating" : "ratings"}`);
-  if (professor.numRatings > 0 && professor.numRatings < FEW_RATINGS) {
-    count.append(element("span", "few-ratings", "Few ratings"));
+  if (professor && professor.numRatings > 0) {
+    const stats = element("dl", "stats", "");
+    stats.append(buildStat("Difficulty", formatScore(professor.avgDifficulty)),
+      buildStat("Would retake", formatScore(professor.wouldTakeAgainPercent, true)));
+    body.append(stats);
   }
+  if (professor) {
+    const few = professor.numRatings > 0 && professor.numRatings < FEW_RATINGS;
+    const count = professor.numRatings === 0 ? "No student ratings yet."
+      : few ? `Based on only ${professor.numRatings} ${professor.numRatings === 1 ? "rating" : "ratings"}.`
+      : `${professor.numRatings.toLocaleString()} ratings`;
+    body.append(element("p", few ? "result-count few" : "result-count", count));
+  }
+  row.append(body);
 
-  card.append(summary, metrics, count);
-  return card;
+  if (professor) {
+    const rating = professor.avgRating;
+    const score = element("div", rating === null ? "score empty" : "score", "");
+    score.setAttribute("aria-label", rating === null ? "No overall rating" : `Rated ${rating.toFixed(1)} out of 5`);
+    const value = element("span", "score-value", formatScore(rating));
+    const meter = element("span", "score-meter", "");
+    if (rating !== null) meter.style.setProperty("--fill", `${(rating / 5) * 100}%`);
+    for (const child of [value, meter]) child.setAttribute("aria-hidden", "true");
+    score.append(value, meter);
+    row.append(score);
+  }
+  return row;
 }
 
-function render(state: SearchState) {
+function buildCourseRow(instructor: CourseInstructor, index: number): HTMLLIElement {
+  return buildRow(instructor.professor, { rank: index + 1, sfuName: instructor.name, sections: instructor.sections });
+}
+
+function resetView(state: { status: string }) {
   clear.hidden = input.value.length === 0;
   loading.hidden = state.status !== "loading";
   results.setAttribute("aria-busy", String(state.status === "loading"));
   results.replaceChildren();
   results.hidden = true;
   more.hidden = true;
+  courseSummary.hidden = true;
+  status.classList.remove("visually-hidden");
+  examples.hidden = true;
+  results.classList.toggle("ranked", mode === "course");
   retry.hidden = state.status !== "error";
   empty.hidden = state.status === "loading";
+}
 
+function showEmpty(heading: string, text: string) {
+  title.textContent = heading;
+  description.textContent = text;
+}
+
+function renderProfessors(state: SearchState) {
+  resetView(state);
   if (state.status === "idle") {
-    status.textContent = "Type at least 2 characters to start.";
-    title.textContent = "Find your professor.";
-    description.textContent = "Ratings, difficulty, and would-retake scores for SFU professors, from Rate My Professors.";
+    status.textContent = "";
+    showEmpty("Look up an SFU instructor", "Type a first or last name to see their Rate My Professors scores.");
   } else if (state.status === "loading") {
     status.textContent = `Searching SFU for “${state.query}”…`;
   } else if (state.status === "error") {
-    status.textContent = "Professor search is unavailable.";
-    title.textContent = "Couldn’t load professors.";
-    description.textContent = "Check your connection and try again. Rate My Professors may be temporarily unavailable.";
+    status.textContent = "";
+    showEmpty("Rate My Professors didn’t respond", "Check your connection, then try again.");
   } else if (state.status === "success") {
     const { professors, hasMore } = state.data;
     more.hidden = !hasMore;
     if (!professors.length) {
-      status.textContent = `No SFU matches for “${state.query}”.`;
-      title.textContent = "No professors found.";
-      description.textContent = "Try a different spelling or just a last name. Only professors listed on SFU’s Rate My Professors page appear here.";
+      status.textContent = "";
+      showEmpty(`No SFU instructors match “${state.query}”`, "Try another spelling, or search by last name only.");
       return;
     }
     empty.hidden = true;
     results.hidden = false;
-    status.textContent = `${hasMore ? "Showing " : ""}${professors.length} ${professors.length === 1 ? "professor" : "professors"} for “${state.query}”`;
-    results.append(...professors.map(buildProfessorCard));
+    status.textContent = `${hasMore ? "First " : ""}${professors.length} ${professors.length === 1 ? "match" : "matches"} for “${state.query}”`;
+    results.append(...professors.map(professor => buildRow(professor)));
   }
 }
 
-const search = createProfessorSearch(async query => {
+function renderCourse(state: SearchState<CourseInstructorsData | null>) {
+  resetView(state);
+  const code = parseCourseCode(state.query);
+  const course = code ? formatCourseCode(code) : state.query;
+  const term = selectedTerm();
+  if (state.status === "idle") {
+    status.textContent = "";
+    showEmpty("Compare who’s teaching a course", "Enter a course code to see every instructor for the term, best rated first.");
+    examples.hidden = false;
+  } else if (state.status === "loading") {
+    status.textContent = `Looking up ${course} for ${termLabel(term)}…`;
+  } else if (state.status === "error") {
+    status.textContent = "";
+    showEmpty("Couldn’t load this course", "SFU course outlines or Rate My Professors didn’t respond. Check your connection, then try again.");
+  } else if (state.status === "success") {
+    const data = state.data;
+    if (!data) {
+      status.textContent = "";
+      showEmpty(`${course} isn’t offered in ${termLabel(term)}`, "Switch the term, or check the course code.");
+      return;
+    }
+    if (!data.instructors.length) {
+      status.textContent = "";
+      showEmpty("No instructors listed yet", `SFU hasn’t posted instructors for ${data.course} in ${data.term}. Check back closer to the start of term.`);
+      return;
+    }
+    empty.hidden = true;
+    results.hidden = false;
+    courseSummary.hidden = false;
+    status.classList.add("visually-hidden");
+    const count = `${data.instructors.length} ${data.instructors.length === 1 ? "instructor" : "instructors"}`;
+    status.textContent = `${count} teaching ${data.course} in ${data.term}, ranked by rating.`;
+    courseTitle.textContent = data.title || data.course;
+    const unassigned = data.unassignedSections.length === 0 ? "" : ` ${data.unassignedSections.join(", ")} ${data.unassignedSections.length === 1 ? "has" : "have"} no instructor listed yet.`;
+    courseMeta.textContent = `${data.course}, ${data.term}. ${count}, best rated first.${unassigned}`;
+    results.append(...data.instructors.map(buildCourseRow));
+  }
+}
+
+type Mode = "professor" | "course";
+let mode: Mode = "professor";
+const drafts: Record<Mode, string> = { professor: "", course: "" };
+let lastProfessorState: SearchState | undefined;
+let lastCourseState: SearchState<CourseInstructorsData | null> | undefined;
+
+const terms = termOptions();
+termSelect.append(...terms.map((term, index) => {
+  const option = element("option", "", termLabel(term));
+  option.value = String(index);
+  return option;
+}));
+const selectedTerm = () => terms[Number(termSelect.value)] ?? terms[0];
+
+const professorSearch = createProfessorSearch(async query => {
   const request: SearchProfessorsRequest = {
     type: SEARCH_PROFESSORS_MESSAGE_TYPE, payload: { query },
   };
@@ -135,21 +231,88 @@ const search = createProfessorSearch(async query => {
     throw new Error("Professor search is unavailable.");
   }
   return response.data;
-}, render);
+}, state => {
+  lastProfessorState = state;
+  if (mode === "professor") renderProfessors(state);
+});
+
+const courseSearch = createProfessorSearch<CourseInstructorsData | null>(async query => {
+  const code = parseCourseCode(query)!;
+  const request: CourseInstructorsRequest = {
+    type: COURSE_INSTRUCTORS_MESSAGE_TYPE, payload: { ...code, ...selectedTerm() },
+  };
+  const response: CourseInstructorsResponse | undefined = await chrome.runtime.sendMessage(request);
+  if (!response || response.status !== "Success" ||
+    (response.data !== null && !Array.isArray(response.data?.instructors))) {
+    throw new Error("Course lookup is unavailable.");
+  }
+  return response.data;
+}, state => {
+  lastCourseState = state;
+  if (mode === "course") renderCourse(state);
+}, query => parseCourseCode(query) !== null);
+
+const activeSearch = () => mode === "professor" ? professorSearch : courseSearch;
+
+function setMode(next: Mode) {
+  if (next === mode) return;
+  drafts[mode] = input.value;
+  mode = next;
+  for (const button of modeButtons) {
+    const checked = button.dataset.mode === mode;
+    button.setAttribute("aria-checked", String(checked));
+    button.tabIndex = checked ? 0 : -1;
+  }
+  const course = mode === "course";
+  input.value = drafts[mode];
+  input.placeholder = course ? "Course code" : "First or last name";
+  label.textContent = course ? "Course code" : "Professor name";
+  termSelect.hidden = !course;
+  // Re-show this mode's last results instead of searching again.
+  const last = course ? lastCourseState : lastProfessorState;
+  if (last) {
+    if (course) renderCourse(last as SearchState<CourseInstructorsData | null>);
+    else renderProfessors(last as SearchState);
+  } else activeSearch().update(input.value);
+  input.focus();
+}
+
+for (const button of modeButtons) {
+  button.tabIndex = button.dataset.mode === mode ? 0 : -1;
+  button.addEventListener("click", () => setMode(button.dataset.mode as Mode));
+  button.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    setMode(mode === "professor" ? "course" : "professor");
+    modeButtons.find(b => b.dataset.mode === mode)?.focus();
+  });
+}
+for (const code of ["CMPT 120", "MATH 151", "ECON 103"]) {
+  const button = element("button", "example", code);
+  button.type = "button";
+  button.addEventListener("click", () => {
+    input.value = code;
+    courseSearch.update(code, true);
+    input.focus();
+  });
+  examples.append(button);
+}
+examples.prepend("Try ");
+termSelect.addEventListener("change", () => courseSearch.update(input.value, true));
 
 let composing = false;
-input.addEventListener("compositionstart", () => { composing = true; search.update(""); });
-input.addEventListener("compositionend", () => { composing = false; search.update(input.value); });
+input.addEventListener("compositionstart", () => { composing = true; activeSearch().update(""); });
+input.addEventListener("compositionend", () => { composing = false; activeSearch().update(input.value); });
 input.addEventListener("input", () => {
-  if (!composing) search.update(input.value);
+  if (!composing) activeSearch().update(input.value);
 });
 form.addEventListener("submit", event => {
   event.preventDefault();
-  if (!composing) search.update(input.value, true);
+  if (!composing) activeSearch().update(input.value, true);
 });
 function clearSearch() {
   input.value = "";
-  search.update("");
+  activeSearch().update("");
   input.focus();
 }
 clear.addEventListener("click", clearSearch);
@@ -161,6 +324,6 @@ input.addEventListener("keydown", event => {
 });
 retry.addEventListener("click", () => {
   input.focus();
-  search.update(input.value, true);
+  activeSearch().update(input.value, true);
 });
-search.update(input.value);
+activeSearch().update(input.value);
