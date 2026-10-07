@@ -5,6 +5,7 @@ import {
   type SearchProfessorsRequest,
   type SearchProfessorsResponse,
 } from "../../shared/professor";
+import { FEW_RATINGS, metricTone, type MetricKind } from "../../shared/format";
 import { createProfessorSearch, type SearchState } from "../../sidepanel/search-controller";
 
 const input = document.querySelector<HTMLInputElement>("#professor-search")!;
@@ -26,39 +27,66 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: strin
   return node;
 }
 
+function buildMeter(label: string, score: number | null, kind: MetricKind) {
+  const isPercent = kind === "takeAgain";
+  const meter = element("div", "meter", "");
+  const top = element("div", "meter-top", "");
+  const value = element("dd", "meter-value", score === null ? "—" :
+    isPercent ? `${Math.round(score)}%` : score.toFixed(1));
+  if (score === null) value.setAttribute("aria-label", "Not available");
+  else if (!isPercent) value.append(element("span", "metric-unit", "/ 5"));
+  top.append(element("dt", "meter-label", label), value);
+  const track = element("div", "meter-track", "");
+  track.setAttribute("aria-hidden", "true");
+  if (score !== null) {
+    const fill = element("span", `meter-fill tone-${metricTone(score, kind)}`, "");
+    fill.style.width = `${Math.min(100, Math.max(0, isPercent ? score : score * 20))}%`;
+    track.append(fill);
+  }
+  meter.append(top, track);
+  return meter;
+}
+
 function buildProfessorCard(professor: ProfessorSearchResult): HTMLLIElement {
   const card = element("li", "professor-card", "");
+
+  const rating = professor.avgRating;
+  const badge = element("div", `rating-badge${rating === null ? "" : ` tone-${metricTone(rating, "rating")}`}`, "");
+  badge.setAttribute("aria-label", rating === null ? "Rating not available" : `Rating ${rating.toFixed(1)} out of 5`);
+  badge.append(element("span", "rating-value", rating === null ? "—" : rating.toFixed(1)),
+    element("span", "rating-scale", rating === null ? "No rating" : "/ 5"));
+  for (const child of badge.children) child.setAttribute("aria-hidden", "true");
+
+  const identity = element("div", "identity", "");
   const heading = element("h2", "professor-name", "");
   if (professor.legacyId) {
+    // The link's ::after stretches over the whole card, so the card is one click target.
     const link = element("a", "profile-link", professor.name);
     link.href = `https://www.ratemyprofessors.com/professor/${professor.legacyId}`;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     link.setAttribute("aria-label", `${professor.name} on Rate My Professors (opens in a new tab)`);
+    heading.append(link);
     const arrow = element("span", "profile-arrow", "↗");
     arrow.setAttribute("aria-hidden", "true");
-    link.append(arrow);
-    heading.append(link);
+    card.append(arrow);
   } else heading.textContent = professor.name;
+  identity.append(heading, element("p", "department", professor.department));
+
+  const summary = element("div", "card-summary", "");
+  summary.append(badge, identity);
 
   const metrics = element("dl", "metrics", "");
-  const scores: Array<[string, number | null, string]> = [
-    ["Rating", professor.avgRating, "/ 5"],
-    ["Difficulty", professor.avgDifficulty, "/ 5"],
-    ["Would retake", professor.wouldTakeAgainPercent, "%"],
-  ];
-  for (const [label, score, unit] of scores) {
-    const metric = element("div", "metric", "");
-    const value = element("dd", "metric-value", score === null ? "—" :
-      unit === "%" ? String(Math.round(score)) : score.toFixed(1));
-    if (score === null) value.setAttribute("aria-label", "Not available");
-    else value.append(element("span", "metric-unit", unit));
-    metric.append(element("dt", "metric-label", label), value);
-    metrics.append(metric);
+  metrics.append(buildMeter("Difficulty", professor.avgDifficulty, "difficulty"),
+    buildMeter("Would retake", professor.wouldTakeAgainPercent, "takeAgain"));
+
+  const count = element("p", "rating-count", professor.numRatings === 0 ? "No student ratings yet" :
+    `${professor.numRatings.toLocaleString()} student ${professor.numRatings === 1 ? "rating" : "ratings"}`);
+  if (professor.numRatings > 0 && professor.numRatings < FEW_RATINGS) {
+    count.append(element("span", "few-ratings", "Few ratings"));
   }
-  card.append(heading, element("p", "department", professor.department), metrics,
-    element("p", "rating-count", professor.numRatings === 0 ? "No student ratings yet" :
-      `${professor.numRatings.toLocaleString()} student ${professor.numRatings === 1 ? "rating" : "ratings"}`));
+
+  card.append(summary, metrics, count);
   return card;
 }
 
@@ -74,8 +102,8 @@ function render(state: SearchState) {
 
   if (state.status === "idle") {
     status.textContent = "Type at least 2 characters to start.";
-    title.textContent = "Know who’s teaching.";
-    description.textContent = "Find ratings, difficulty, and student feedback for SFU professors.";
+    title.textContent = "Find your professor.";
+    description.textContent = "Ratings, difficulty, and would-retake scores for SFU professors, from Rate My Professors.";
   } else if (state.status === "loading") {
     status.textContent = `Searching SFU for “${state.query}”…`;
   } else if (state.status === "error") {
@@ -119,10 +147,17 @@ form.addEventListener("submit", event => {
   event.preventDefault();
   if (!composing) search.update(input.value, true);
 });
-clear.addEventListener("click", () => {
+function clearSearch() {
   input.value = "";
   search.update("");
   input.focus();
+}
+clear.addEventListener("click", clearSearch);
+input.addEventListener("keydown", event => {
+  if (event.key === "Escape" && input.value) {
+    event.preventDefault();
+    clearSearch();
+  }
 });
 retry.addEventListener("click", () => {
   input.focus();

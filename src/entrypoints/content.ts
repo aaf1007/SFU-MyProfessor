@@ -1,6 +1,7 @@
 import { defineContentScript } from "wxt/utils/define-content-script";
 
 import "../content/content.css";
+import { metricTone, type MetricKind } from "../shared/format";
 import {
   FETCH_DATA_MESSAGE_TYPE,
   type FetchDataRequest,
@@ -122,29 +123,12 @@ const initContentScript = () => {
     });
   };
 
-  type RatingKind = "rating" | "difficulty" | "takeAgain";
-
-  const ratingColorClass = (value: number, kind: RatingKind): string => {
-    let isGood: boolean;
-    let isMid: boolean;
-
-    if (kind === "rating") {
-      isGood = value >= 4;
-      isMid = value >= 3;
-    } else if (kind === "difficulty") {
-      // low difficulty is good
-      isGood = value <= 2.5;
-      isMid = value <= 3.5;
-    } else {
-      // takeAgain percentage
-      isGood = value >= 80;
-      isMid = value >= 60;
-    }
-
-    if (isGood) {
+  const ratingColorClass = (value: number, kind: MetricKind): string => {
+    const tone = metricTone(value, kind);
+    if (tone === "good") {
       return "tw:bg-green-100 tw:text-green-800 tw:ring-green-200";
     }
-    if (isMid) {
+    if (tone === "mid") {
       return "tw:bg-yellow-100 tw:text-yellow-800 tw:ring-yellow-200";
     }
     return "tw:bg-red-100 tw:text-red-800 tw:ring-red-200";

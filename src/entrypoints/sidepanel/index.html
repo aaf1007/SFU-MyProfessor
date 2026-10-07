@@ -4,20 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SFU MyProfessor</title>
+    <meta name="color-scheme" content="light dark" />
   </head>
   <body>
     <header class="search-header">
       <div class="brand"><span class="brand-mark">SFU</span><span>MyProfessor</span></div>
-      <h1>Find your professor.</h1>
-      <p class="intro">A little insight before your next class.</p>
       <form id="search-form" role="search">
-        <label for="professor-search">Professor name</label>
+        <label class="visually-hidden" for="professor-search">Professor name</label>
         <div class="search-field">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
-          <input id="professor-search" type="search" placeholder="Search by first or last name" maxlength="100" autocomplete="off" spellcheck="false" aria-describedby="search-hint" autofocus />
+          <input id="professor-search" type="search" placeholder="Search SFU professors" maxlength="100" autocomplete="off" spellcheck="false" aria-describedby="search-hint" autofocus />
           <button id="clear-search" type="button" aria-label="Clear search" hidden>×</button>
         </div>
-        <p id="search-hint">Simon Fraser University only</p>
+        <p id="search-hint">First or last name · Esc to clear</p>
       </form>
     </header>
     <main>
@@ -26,8 +25,8 @@
         <div class="empty-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="m3 7 9-4 9 4-9 4-9-4Z"/><path d="M6 9v7c3 3 9 3 12 0V9M21 7v9"/></svg>
         </div>
-        <h2 id="state-title">Know who’s teaching.</h2>
-        <p id="state-description">Find ratings, difficulty, and student feedback for SFU professors.</p>
+        <h1 id="state-title">Find your professor.</h1>
+        <p id="state-description">Ratings, difficulty, and would-retake scores for SFU professors, from Rate My Professors.</p>
         <button id="retry-search" class="retry-button" type="button" hidden>Try again</button>
       </section>
       <div id="loading-state" class="loading-state" aria-hidden="true" hidden>
