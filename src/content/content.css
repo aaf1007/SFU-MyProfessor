@@ -1,2 +1,2 @@
 @import "tailwindcss" prefix(tw);
-@source "../entrypoints/content.ts";
+@source "./cards.ts";

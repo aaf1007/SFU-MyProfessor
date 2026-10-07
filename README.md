@@ -14,7 +14,7 @@ Click the **SFU MyProfessor** extension icon to open the Chrome side panel on an
 - Search by first or last name; results appear after at least two characters and a short typing delay. Press Enter to search immediately.
 - View names, departments, ratings, difficulty, would-retake percentages, and student rating counts. Click a professor's name to open their RMP profile in a new tab.
 - Searches use the main **Simon Fraser University** listing already used by the schedule lookup. Results are checked against that school's ID; this is not a complete SFU faculty directory or an aggregation of separate campus listings.
-- Shows up to 20 matches. If more exist, narrow the name to find the professor you want.
+- Shows 20 matches at a time; **Show more professors** loads the next page.
 - Missing scores appear as `—`. Empty results and temporary failures have distinct states, with a retry button for failures.
 - The panel remains available when switching tabs; it does not require an SFU page to be open.
 
@@ -22,11 +22,12 @@ Click the **SFU MyProfessor** extension icon to open the Chrome side panel on an
 
 On `https://myschedule.erp.sfu.ca/*`, a new row is inserted under each instructor entry showing:
 
-- Professor name
-- Average rating
-- Average difficulty
-- Would-take-again percentage
+- Professor name (as listed on RMP, linked to their profile)
+- Average rating, average difficulty, and would-take-again percentage (`—` when RMP has no data)
 - Top student-reported rating tags
+- A **Search ↗** button that opens the side panel already searching for that professor
+
+Each schedule name is checked against the RMP result before anything is shown, so a fuzzy match on a different professor shows "No Rate My Professors match" (with a link to search RMP yourself) instead of someone else's ratings. Cells listing several instructors get one card per instructor. Lookups are cached in `chrome.storage.local` for 7 days (1 day for "not found"). Failed lookups show a **Retry** button.
 
 ## Screenshots
 
@@ -63,23 +64,22 @@ Look up an instructor while viewing their course outline. The screenshot below s
 SFU MySchedule page
   |
   |-- content script: src/entrypoints/content.ts
-  |    - scans instructor cells (div.rightnclear[title="Instructor(s)"])
-  |    - deduplicates with a processed Map and in-flight processing Set
-  |    - sends FETCH_DATA messages to the background worker
-  |    - builds and inserts a <tr> rating card after each instructor row
+  |    - src/content/schedule.ts: scans instructor cells (div.rightnclear[title="Instructor(s)"]),
+  |      sends FETCH_DATA messages, keeps one rating <tr> in sync per cell
+  |    - src/content/instructors.ts: parses a cell into names / Staff / TBD
+  |    - src/content/cards.ts: builds the rating, not-found, error, and TBD cards
   |
   |-- content stylesheet: src/content/content.css
   |    - imports Tailwind CSS v4 utilities (prefix: tw:) used by injected rows
   |
   |-- background worker: src/background/background.ts
-  |    - receives FETCH_DATA messages from the content script
-  |    - delegates to src/background/rmp.ts
-  |    - returns professor data to the content script
+  |    - handles FETCH_DATA, SEARCH_PROFESSORS, and OPEN_SEARCH messages
+  |    - caches schedule lookups in chrome.storage.local (src/background/cache.ts)
   |
   |-- RMP client: src/background/rmp.ts
   |    - custom GraphQL client for the RMP API
   |    - fetches and caches the SFU school ID for the service worker lifetime
-  |    - searches for a teacher by name scoped to Simon Fraser University
+  |    - verifies schedule matches by name (src/background/name-match.ts)
   |
   |-- shared types: src/shared/professor.ts
   |    - schedule and search data contracts, message types, and request validation
@@ -104,11 +104,19 @@ sfu-myprofessor/
 ├── src/
 │   ├── background/
 │   │   ├── background.ts
+│   │   ├── cache.ts
+│   │   ├── name-match.ts
 │   │   └── rmp.ts
 │   ├── content/
-│   │   └── content.css
+│   │   ├── cards.ts
+│   │   ├── content.css
+│   │   ├── instructors.ts
+│   │   └── schedule.ts
 │   ├── shared/
+│   │   ├── format.ts
 │   │   └── professor.ts
+│   ├── sidepanel/
+│   │   └── search-controller.ts
 │   └── entrypoints/
 │       ├── background.ts
 │       ├── content.ts
@@ -154,7 +162,7 @@ npm run typecheck
 npm run build
 ```
 
-Tests exercise school filtering, score normalization, error handling, background messages, search debouncing, stale responses, and the existing schedule lookup contract. They use Node's test runner and esbuild to load TypeScript; no live RMP calls are required.
+Tests exercise school filtering, name matching, score normalization and formatting, caching, instructor-cell parsing, error handling, background messages, search debouncing and paging, and stale responses. CI (`.github/workflows/ci.yml`) runs all three commands on every push and pull request. They use Node's test runner and esbuild to load TypeScript; no live RMP calls are required.
 
 After building, reload the extension at `chrome://extensions` (or load `.output/chrome-mv3/` with **Load unpacked**). Click the toolbar icon, search a partial name, follow a profile link, and switch tabs. Also check that MySchedule still inserts rating cards.
 
@@ -163,7 +171,7 @@ After building, reload the extension at `chrome://extensions` (or load `.output/
 
 | Permission                         | Why it is present                                                          |
 | ---------------------------------- | -------------------------------------------------------------------------- |
-| `storage`                          | Declared for future persistent caching, not currently used                 |
+| `storage`                          | Caches professor lookups; hands schedule searches to the side panel        |
 | `sidePanel`                        | Displays professor search beside the current webpage                      |
 | `https://*.ratemyprofessors.com/*` | Allows the background worker to fetch professor data from RMP              |
 | `https://myschedule.erp.sfu.ca/*`  | Allows the content script to run on the SFU schedule site                  |
@@ -176,16 +184,9 @@ After building, reload the extension at `chrome://extensions` (or load `.output/
 - Check the page URL matches `https://myschedule.erp.sfu.ca/*`
 - Open DevTools console and look for extension errors
 
-**Ratings stop appearing after navigating within MySchedule**
-- Reload the MySchedule page so the content script re-runs
-
-**A professor row never gets data**
-- The instructor name may not match any RMP record for Simon Fraser University
-- No not-found state is displayed in the current version
-
-## What's Next
-
-- **Smarter caching**: Professor lookups could use a time-to-live (TTL) layer so repeat visits do not always hit Rate My Professor. A small remote cache (for example **Redis**) or extension storage with expiry would reduce API traffic and speed up the schedule view.
+**A professor shows "No Rate My Professors match"**
+- The SFU name didn't match any RMP record for Simon Fraser University closely enough. Nicknames (e.g. "Bobby" vs. "Robert") aren't matched. Use **Search RMP ↗** or **Search ↗** to look manually.
+- "Not found" results are cached for a day. Removing and re-adding the extension clears the cache sooner.
 
 ## Contributing
 

@@ -66,11 +66,60 @@ test('a custom readiness check keeps partial input idle', async () => {
   const { createProfessorSearch } = await loadModule('src/sidepanel/search-controller.ts');
   const requests = [], states = [];
   const search = createProfessorSearch(async query => { requests.push(query); return null; },
-    state => states.push(state), query => /^[a-z]{2,5}\s*\d{3}$/i.test(query));
+    state => states.push(state), { isReady: query => /^[a-z]{2,5}\s*\d{3}$/i.test(query), paging: null });
   search.update('CMPT 22', true);
   assert.equal(states.at(-1).status, 'idle');
   search.update('CMPT 225', true);
   await delay(0);
   assert.deepEqual(requests, ['CMPT 225']);
-  assert.deepEqual(states.at(-1), { status: 'success', query: 'CMPT 225', data: null });
+  assert.deepEqual(states.at(-1), { status: 'success', query: 'CMPT 225', data: null, loadingMore: false, loadMoreFailed: false });
+  await search.loadMore();
+  assert.deepEqual(requests, ['CMPT 225'], 'loadMore is a no-op without paging');
+});
+
+const page = (names, cursor) => ({
+  professors: names.map((name, i) => ({ name, legacyId: name === 'dup' ? '1' : `${name}-${i}`, department: 'CS',
+    avgRating: null, avgDifficulty: null, wouldTakeAgainPercent: null, numRatings: 0 })),
+  hasMore: !!cursor, cursor,
+});
+
+test('load more appends the next page, deduplicates, and tracks failure', async () => {
+  const { createProfessorSearch } = await loadModule('src/sidepanel/search-controller.ts');
+  const calls = [], states = [];
+  let fail = true;
+  const search = createProfessorSearch(async (query, after) => {
+    calls.push([query, after]);
+    if (!after) return page(['a', 'dup'], 'c1');
+    if (fail) { fail = false; throw new Error('Offline'); }
+    return page(['dup', 'b'], null);
+  }, state => states.push(state));
+  search.update('chan', true);
+  await delay(0);
+  await search.loadMore();
+  assert.equal(states.at(-1).loadMoreFailed, true);
+  assert.equal(states.at(-1).data.professors.length, 2);
+  await search.loadMore();
+  assert.deepEqual(calls, [['chan', undefined], ['chan', 'c1'], ['chan', 'c1']]);
+  const last = states.at(-1);
+  assert.deepEqual(last.data.professors.map(p => p.name), ['a', 'dup', 'b']);
+  assert.equal(last.data.hasMore, false);
+  assert.equal(last.loadingMore, false);
+  await search.loadMore();
+  assert.equal(calls.length, 3);
+});
+
+test('a page that arrives after the query changed is discarded', async () => {
+  const { createProfessorSearch } = await loadModule('src/sidepanel/search-controller.ts');
+  const states = [];
+  let resolvePage;
+  const search = createProfessorSearch((query, after) => after
+    ? new Promise(resolve => { resolvePage = resolve; })
+    : Promise.resolve(page(['a'], 'c1')), state => states.push(state));
+  search.update('chan', true);
+  await delay(0);
+  const pending = search.loadMore();
+  search.update('');
+  resolvePage(page(['b'], null));
+  await pending;
+  assert.equal(states.at(-1).status, 'idle');
 });

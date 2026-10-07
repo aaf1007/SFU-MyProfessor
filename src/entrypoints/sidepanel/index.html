@@ -46,7 +46,10 @@
         <p id="course-meta" class="course-meta"></p>
       </div>
       <ul id="search-results" class="results" aria-label="Search results" hidden></ul>
-      <p id="more-results" class="more-results" hidden>More matches are available. Add a first or last name to narrow your search.</p>
+      <div id="more-results" class="more-results" hidden>
+        <button id="load-more" class="load-more-button" type="button">Show more matches</button>
+        <p id="load-more-status" role="status" aria-live="polite"></p>
+      </div>
     </main>
     <footer>Scores from <a href="https://www.ratemyprofessors.com/" target="_blank" rel="noopener noreferrer">Rate My Professors</a>. Course instructors from SFU course outlines.</footer>
     <script type="module" src="./main.ts"></script>

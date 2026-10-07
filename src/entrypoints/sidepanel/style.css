@@ -153,6 +153,11 @@ main { flex: 1; padding: 0 16px 28px; }
 .result:has(.few) .score-meter { background: linear-gradient(to right, var(--graphite) var(--fill, 0%), var(--rule) 0); }
 
 .more-results { margin: 18px 0 0; color: var(--graphite); font-size: 13px; line-height: 1.5; }
+.more-results p { margin: 8px 0 0; }
+.more-results p:empty { display: none; }
+.load-more-button { width: 100%; padding: 10px 16px; border: 1.5px solid var(--ink); border-radius: 3px; background: none; font-size: 13.5px; font-weight: 650; }
+.load-more-button:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
+.load-more-button:disabled { border-color: var(--rule); color: var(--graphite); cursor: progress; }
 
 footer { padding: 14px 16px 18px; border-top: 1px solid var(--rule); color: var(--graphite); font-size: 11.5px; line-height: 1.55; }
 footer a { text-underline-offset: 2px; }
