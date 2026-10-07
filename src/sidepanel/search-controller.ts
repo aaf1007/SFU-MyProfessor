@@ -1,12 +1,13 @@
 import type { ProfessorSearchData } from "../shared/professor";
 
-export type SearchState =
+export type SearchState<T = ProfessorSearchData> =
   | { status: "idle" | "loading" | "error"; query: string }
-  | { status: "success"; query: string; data: ProfessorSearchData };
+  | { status: "success"; query: string; data: T };
 
-export function createProfessorSearch(
-  request: (query: string) => Promise<ProfessorSearchData>,
-  onState: (state: SearchState) => void,
+export function createProfessorSearch<T = ProfessorSearchData>(
+  request: (query: string) => Promise<T>,
+  onState: (state: SearchState<T>) => void,
+  isReady: (query: string) => boolean = query => query.length >= 2,
 ) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let generation = 0;
@@ -16,7 +17,7 @@ export function createProfessorSearch(
     // Invalidate immediately, including the interval before the next request starts.
     const current = ++generation;
     const query = value.trim().replace(/\s+/g, " ");
-    if (query.length < 2) {
+    if (!isReady(query)) {
       onState({ status: "idle", query });
       return;
     }

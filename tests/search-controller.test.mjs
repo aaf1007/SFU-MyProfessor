@@ -61,3 +61,16 @@ test('failed searches can be retried immediately with Enter or Retry', async () 
   await delay(0);
   assert.equal(states.at(-1).status, 'success');
 });
+
+test('a custom readiness check keeps partial input idle', async () => {
+  const { createProfessorSearch } = await loadModule('src/sidepanel/search-controller.ts');
+  const requests = [], states = [];
+  const search = createProfessorSearch(async query => { requests.push(query); return null; },
+    state => states.push(state), query => /^[a-z]{2,5}\s*\d{3}$/i.test(query));
+  search.update('CMPT 22', true);
+  assert.equal(states.at(-1).status, 'idle');
+  search.update('CMPT 225', true);
+  await delay(0);
+  assert.deepEqual(requests, ['CMPT 225']);
+  assert.deepEqual(states.at(-1), { status: 'success', query: 'CMPT 225', data: null });
+});
