@@ -62,6 +62,21 @@ test('failed searches can be retried immediately with Enter or Retry', async () 
   assert.equal(states.at(-1).status, 'success');
 });
 
+test('a custom readiness check keeps partial input idle', async () => {
+  const { createProfessorSearch } = await loadModule('src/sidepanel/search-controller.ts');
+  const requests = [], states = [];
+  const search = createProfessorSearch(async query => { requests.push(query); return null; },
+    state => states.push(state), { isReady: query => /^[a-z]{2,5}\s*\d{3}$/i.test(query), paging: null });
+  search.update('CMPT 22', true);
+  assert.equal(states.at(-1).status, 'idle');
+  search.update('CMPT 225', true);
+  await delay(0);
+  assert.deepEqual(requests, ['CMPT 225']);
+  assert.deepEqual(states.at(-1), { status: 'success', query: 'CMPT 225', data: null, loadingMore: false, loadMoreFailed: false });
+  await search.loadMore();
+  assert.deepEqual(requests, ['CMPT 225'], 'loadMore is a no-op without paging');
+});
+
 const page = (names, cursor) => ({
   professors: names.map((name, i) => ({ name, legacyId: name === 'dup' ? '1' : `${name}-${i}`, department: 'CS',
     avgRating: null, avgDifficulty: null, wouldTakeAgainPercent: null, numRatings: 0 })),

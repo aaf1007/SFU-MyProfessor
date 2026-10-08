@@ -28,3 +28,6 @@ export const scoreTone = (value: number | null, kind: ScoreKind): ScoreTone | nu
 
 export const formatRatingCount = (count: number): string =>
   `${count.toLocaleString()} ${count === 1 ? "rating" : "ratings"}`;
+
+// Below this many ratings the averages swing too much to trust.
+export const FEW_RATINGS = 5;

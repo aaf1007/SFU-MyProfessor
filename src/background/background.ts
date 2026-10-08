@@ -1,6 +1,10 @@
 import { createProfessorCache } from "./cache";
+import { getCourseInstructors } from "./course-instructors";
 import { fetchProfessorData, searchProfessors } from "./rmp";
 import {
+  COURSE_INSTRUCTORS_MESSAGE_TYPE,
+  type CourseInstructorsResponse,
+  isCourseInstructorsRequest,
   type FetchDataResponse,
   isFetchDataRequest,
   isOpenSearchRequest,
@@ -13,7 +17,7 @@ import {
   type SearchProfessorsResponse,
 } from "../shared/professor";
 
-type AnyResponse = FetchDataResponse | SearchProfessorsResponse | OpenSearchResponse;
+type AnyResponse = FetchDataResponse | SearchProfessorsResponse | OpenSearchResponse | CourseInstructorsResponse;
 
 const errorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
@@ -71,6 +75,21 @@ export function initBackground() {
           .catch((error: unknown) => sendResponse({
             status: "Error",
             message: errorMessage(error, "Could not open professor search."),
+          }));
+        return true;
+      }
+
+      if (hasType(message, COURSE_INSTRUCTORS_MESSAGE_TYPE)) {
+        if (!isCourseInstructorsRequest(message)) {
+          sendResponse({ status: "Error", message: "Enter a course code like CMPT 225." });
+          return;
+        }
+        const { dept, number, year, season } = message.payload;
+        getCourseInstructors({ year, season }, { dept, number })
+          .then(data => sendResponse({ status: "Success", data }))
+          .catch((error: unknown) => sendResponse({
+            status: "Error",
+            message: errorMessage(error, "Course lookup is unavailable."),
           }));
         return true;
       }
