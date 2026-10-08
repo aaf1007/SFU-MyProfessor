@@ -38,5 +38,7 @@ npm-debug.log*
 *.md
 !README.md
 
-# Claude
-.claude
+# Claude (local settings stay ignored; project skills are shared)
+.claude/*
+!.claude/skills/
+!.claude/skills/**/SKILL.md
